@@ -12,7 +12,9 @@
 #include <SuiteSparseQR.hpp>
 #endif
 
+#ifdef POLYFEM_WITH_ARMADILLO
 #include <armadillo>
+#endif
 
 #include <igl/cat.h>
 #include <igl/Timer.h>
@@ -61,6 +63,8 @@ namespace polyfem::solver
 			cmat.itype = CHOLMOD_LONG;
 		}
 #endif
+
+#ifdef POLYFEM_WITH_ARMADILLO
 		arma::sp_mat fill_arma(const StiffnessMatrix &mat)
 		{
 			std::vector<unsigned long long> rowind_vect(mat.innerIndexPtr(), mat.innerIndexPtr() + mat.nonZeros());
@@ -86,6 +90,7 @@ namespace polyfem::solver
 				mat.n_rows, mat.n_cols, mat.n_nonzero, innerIndexPtr.data(), outerIndexPtr.data(), mat.values);
 			return out;
 		}
+#endif
 
 	} // namespace
 	NLProblem::NLProblem(
@@ -158,6 +163,8 @@ namespace polyfem::solver
 			Q2t_ = Q2_.transpose();
 
 			reduced_size_ = Q2_.cols();
+			if (reduced_size_ == 0)
+				return;
 			num_penalty_constraints_ = full_size_ - reduced_size_;
 
 			timer.start();
