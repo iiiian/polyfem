@@ -196,8 +196,12 @@ if(WIN32)
     target_link_libraries(polyfem PUBLIC Eigen3::Eigen)
 endif()
 
+target_compile_definitions(polyfem PUBLIC H5PP_USE_EIGEN3)
+add_subdirectory(patched/h5pp)
+
 # polysolve
-include(polysolve)
+# include(polysolve)
+add_subdirectory(patched/polysolve)
 target_link_libraries(polyfem PUBLIC polysolve::polysolve)
 
 # libigl
@@ -255,11 +259,13 @@ include(nanospline)
 target_link_libraries(polyfem PUBLIC nanospline)
 
 # Geogram
-include(geogram)
+# include(geogram)
+add_subdirectory(patched/geogram)
 target_link_libraries(polyfem PUBLIC geogram)
 
 # paraviewo (includes HDF5 and h5pp)
-include(paraviewo)
+# include(paraviewo)
+add_subdirectory(patched/paraviewo)
 target_link_libraries(polyfem PUBLIC paraviewo::paraviewo)
 
 # Jacobian
@@ -311,7 +317,8 @@ endif()
 # wmtk library
 # Include lagrange first to fetch a newer version than
 # what is used in the toolkit.
-include(lagrange)
+# include(lagrange)
+add_subdirectory(patched/lagrange)
 include(wmtk)
 target_link_libraries(polyfem PUBLIC wmtk::toolkit)
 
