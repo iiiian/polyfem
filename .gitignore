@@ -91,3 +91,7 @@ scripts/*.json
 diff-data
 polyspline-data
 pref-data
+out
+patched
+log.txt
+compile_commands.json
