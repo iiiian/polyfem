@@ -1,0 +1,34 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "linux_debug",
+      "inherits": "base",
+      "displayName": "Linux Debug",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux_profile",
+      "inherits": "base",
+      "displayName": "Linux Profile",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS": "-g"
+      }
+    },
+    {
+      "name": "linux_release",
+      "inherits": "base",
+      "displayName": "Linux Release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ]
+}
