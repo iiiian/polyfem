@@ -7,6 +7,7 @@
             "HookeLinearElasticity",
             "SaintVenant",
             "NeoHookean",
+            "SimplifiedNeoHookean",
             "MooneyRivlin",
             "MooneyRivlin3Param",
             "MooneyRivlin3ParamSymbolic",
@@ -79,6 +80,40 @@
             "psi"
         ],
         "doc": "Material Parameters including ID, Lamé first ($\\lambda$), Lamé second ($\\mu$), density ($\\rho$)"
+    },
+    {
+        "pointer": "/",
+        "type": "object",
+        "type_name": "SimplifiedNeoHookean",
+        "required": [
+            "type",
+            "E",
+            "nu"
+        ],
+        "optional": [
+            "id",
+            "rho",
+            "phi",
+            "psi"
+        ],
+        "doc": "Simplified Neo-Hookean parameters including ID, Young's modulus ($E$), Poisson's ratio ($\\nu$), density ($\\rho$)"
+    },
+    {
+        "pointer": "/",
+        "type": "object",
+        "type_name": "SimplifiedNeoHookean",
+        "required": [
+            "type",
+            "lambda",
+            "mu"
+        ],
+        "optional": [
+            "id",
+            "rho",
+            "phi",
+            "psi"
+        ],
+        "doc": "Simplified Neo-Hookean parameters including ID, Lamé first ($\\lambda$), Lamé second ($\\mu$), density ($\\rho$)"
     },
     {
         "pointer": "/",
