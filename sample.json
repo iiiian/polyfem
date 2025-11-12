@@ -1,0 +1,81 @@
+{
+  "geometry": [
+    {
+      "mesh": "/home/ian/local_code/ids/model/bar/bar_width_15_1_1_num_75_5_5.msh",
+      "surface_selection": [
+        { "axis": "-X", "position": 0.0, "relative": false, "id": 1 }
+      ]
+    }
+  ],
+
+  "materials": {
+    "type": "NeoHookean",
+    "E": 2.0e9,
+    "nu": 0.2,
+    "rho": 1000.0
+  },
+
+  "time": {
+    "dt": 0.1,
+    "time_steps": 50
+  },
+
+  "contact": { "enabled": false },
+
+  "solver": {
+    "linear": {
+      "solver": "Eigen::PardisoLDLT"
+    },
+    "nonlinear": {
+      "solver": "Newton",
+      "grad_norm": 0,
+      "rel_grad_norm": 0,
+      "first_grad_norm_tol": 0,
+      "newton_decrement": 0,
+      "x_delta": 0.001,
+      "rel_x_delta": 0.001,
+      "norm_type": "Linf"
+    },
+    "advanced": {
+      "characteristic_length": 1,
+      "characteristic_force_density": 1
+    }
+  },
+
+  "boundary_conditions": {
+    "rhs": [0.0, 9.8, 0.0],
+    "dirichlet_boundary": [
+      { "id": 1, "value": [0.0, 0.0, 0.0] }
+    ]
+  },
+
+  "output": {
+    "paraview": {
+      "volume": true,
+      "surface": false,
+      "wireframe": false,
+      "points": false,
+      "fields": ["solution"],
+      "high_order_mesh": true,
+      "options": {
+        "use_hdf5": false,
+        "material": false,
+        "body_ids": false,
+        "contact_forces": false,
+        "friction_forces": false,
+        "normal_adhesion_forces": false,
+        "tangential_adhesion_forces": false,
+        "velocity": false,
+        "acceleration": false,
+        "scalar_values": false,
+        "tensor_values": false,
+        "discretization_order": false,
+        "nodes": false,
+        "forces": false,
+        "force_high_order": false,
+        "jacobian_validity": false
+      }
+    }
+  }
+}
+

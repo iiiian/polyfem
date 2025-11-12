@@ -107,6 +107,8 @@ namespace polyfem::solver
 			}
 			else if (norm_type == "Linf")
 			{
+        spdlog::error("{} {}", lumped_mass_.size(), x.size());
+        assert(lumped_mass_.size() == x.size());
 				return (lumped_mass_.inverse() * x).cwiseAbs().maxCoeff();
 			}
 			return 1;

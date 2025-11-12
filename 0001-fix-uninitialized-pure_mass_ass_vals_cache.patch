@@ -1,0 +1,31 @@
+From 9d0a0afdf205fb9737f66e4938a2adc353819caa Mon Sep 17 00:00:00 2001
+From: Ian Su <TzuHsiangSu3000@gmail.com>
+Date: Tue, 11 Nov 2025 23:33:22 -0500
+Subject: [PATCH] fix uninitialized pure_mass_ass_vals_cache
+
+---
+ src/polyfem/State.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/polyfem/State.cpp b/src/polyfem/State.cpp
+index 23591ebef..ee22a531c 100644
+--- a/src/polyfem/State.cpp
++++ b/src/polyfem/State.cpp
+@@ -1042,12 +1042,14 @@ namespace polyfem
+ 
+ 		ass_vals_cache.clear();
+ 		mass_ass_vals_cache.clear();
++		pure_mass_ass_vals_cache.clear();
+ 		if (n_bases <= args["solver"]["advanced"]["cache_size"])
+ 		{
+ 			timer.start();
+ 			logger().info("Building cache...");
+ 			ass_vals_cache.init(mesh->is_volume(), bases, curret_bases);
+ 			mass_ass_vals_cache.init(mesh->is_volume(), bases, curret_bases, true);
++			pure_mass_ass_vals_cache.init(mesh->is_volume(), bases, curret_bases, true);
+ 			if (mixed_assembler != nullptr)
+ 				pressure_ass_vals_cache.init(mesh->is_volume(), pressure_bases, curret_bases);
+ 
+-- 
+2.51.1
+
