@@ -70,54 +70,52 @@ namespace polyfem::solver
 
 		double normalize_forms() override;
 
-		virtual double grad_norm_rescaling(const std::string &norm_type) const override 
+		virtual double grad_norm_rescaling(const std::string &norm_type) const override
 		{
 			if (norm_type == "L2")
 			{
-				return F0 * std::pow(L, 3/2);
-			} 
+				return F0 * std::pow(L, 3 / 2);
+			}
 			else if (norm_type == "Linf")
 			{
 				return F0;
 			}
 			return 1;
 		}
-        virtual double step_norm_rescaling(const std::string &norm_type) const override 
+		virtual double step_norm_rescaling(const std::string &norm_type) const override
 		{
 			if (norm_type == "L2")
 			{
-				return std::pow(L, 5/2);
-			} 
+				return std::pow(L, 5 / 2);
+			}
 			else if (norm_type == "Linf")
 			{
 				return L;
 			}
 			return 1;
 		}
-        virtual double energy_norm_rescaling(const std::string &norm_type) const override 
+		virtual double energy_norm_rescaling(const std::string &norm_type) const override
 		{
 			return F0 * L * L * L * L;
 		}
 
-        virtual double grad_norm(const TVector &x, const std::string &norm_type) const override 
+		virtual double grad_norm(const TVector &x, const std::string &norm_type) const override
 		{
 			if (norm_type == "L2")
 			{
-				return sqrt(x.transpose() * lumped_mass_.inverse() * x);
+				return sqrt(x.transpose() * current_lumped_mass().inverse() * x);
 			}
 			else if (norm_type == "Linf")
 			{
-        spdlog::error("{} {}", lumped_mass_.size(), x.size());
-        assert(lumped_mass_.size() == x.size());
-				return (lumped_mass_.inverse() * x).cwiseAbs().maxCoeff();
+				return (current_lumped_mass().inverse() * x).cwiseAbs().maxCoeff();
 			}
 			return 1;
 		}
-        virtual double step_norm(const TVector &x, const std::string &norm_type) const override 
+		virtual double step_norm(const TVector &x, const std::string &norm_type) const override
 		{
 			if (norm_type == "L2")
 			{
-				return sqrt(x.transpose() * lumped_mass_ * x);
+				return sqrt(x.transpose() * current_lumped_mass() * x);
 			}
 			else if (norm_type == "Linf")
 			{
@@ -139,6 +137,11 @@ namespace polyfem::solver
 		int current_size() const
 		{
 			return current_size_ == CurrentSize::FULL_SIZE ? full_size() : reduced_size();
+		}
+
+		Eigen::DiagonalMatrix<double, Eigen::Dynamic> current_lumped_mass() const
+		{
+			return full_to_reduced(lumped_mass_.diagonal()).asDiagonal();
 		}
 
 		double t_;
