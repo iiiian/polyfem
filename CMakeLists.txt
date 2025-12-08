@@ -161,7 +161,7 @@ endif ()
 # CUDA
 ################################################################################
 
-if(IPC_TOOLKIT_WITH_CUDA OR POLYSOLVE_WITH_CUSOLVER)
+if(IPC_TOOLKIT_WITH_CUDA OR POLYSOLVE_WITH_CUSOLVER OR POLYSOLVE_WITH_CUDA_PCG)
     include(CheckLanguage)
     check_language(CUDA)
     if(CMAKE_CUDA_COMPILER)
@@ -174,7 +174,7 @@ if(IPC_TOOLKIT_WITH_CUDA OR POLYSOLVE_WITH_CUSOLVER)
 
     if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.24.0")
         set(CMAKE_CUDA_ARCHITECTURES "native")
-        set_target_properties(ipc_toolkit PROPERTIES CUDA_ARCHITECTURES "native")
+        # set_target_properties(ipc_toolkit PROPERTIES CUDA_ARCHITECTURES "native")
     else()
         include(FindCUDA/select_compute_arch)
         CUDA_DETECT_INSTALLED_GPUS(CUDA_ARCH_LIST)
@@ -215,7 +215,8 @@ if(NOT WIN32)
 endif()
 
 # IPC Toolkit
-include(ipc_toolkit)
+# include(ipc_toolkit)
+add_subdirectory(patched/ipc-toolkit)
 target_link_libraries(polyfem PUBLIC ipc::toolkit)
 
 # Threading
