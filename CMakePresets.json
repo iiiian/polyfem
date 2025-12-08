@@ -1,0 +1,48 @@
+
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fuse-ld=mold",
+        "CMAKE_CUDA_ARCHITECTURES": "native",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+      }
+    },
+    {
+      "name": "profile",
+      "inherits": "base",
+      "displayName": "Profile",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_FLAGS": "-g -fuse-ld=mold",
+        "CMAKE_CUDA_ARCHITECTURES": "native",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CUDA_ARCHITECTURES": "all-major",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON",
+        "IPC_TOOLKIT_WITH_CUDA": "ON"
+      }
+    }
+  ]
+}
