@@ -1040,18 +1040,25 @@ namespace polyfem
 		logger().info("n bases: {}", n_bases);
 		logger().info("n pressure bases: {}", n_pressure_bases);
 
-		ass_vals_cache.clear();
-		mass_ass_vals_cache.clear();
 		if (n_bases <= args["solver"]["advanced"]["cache_size"])
 		{
 			timer.start();
 			logger().info("Building cache...");
 			ass_vals_cache.init(mesh->is_volume(), bases, curret_bases);
 			mass_ass_vals_cache.init(mesh->is_volume(), bases, curret_bases, true);
+			pure_mass_ass_vals_cache.init(mesh->is_volume(), bases, curret_bases, true);
 			if (mixed_assembler != nullptr)
 				pressure_ass_vals_cache.init(mesh->is_volume(), pressure_bases, curret_bases);
 
 			logger().info(" took {}s", timer.getElapsedTime());
+		}
+		else
+		{
+			ass_vals_cache.init_empty();
+			mass_ass_vals_cache.init_empty(true);
+			pure_mass_ass_vals_cache.init_empty(true);
+			if (mixed_assembler != nullptr)
+				pressure_ass_vals_cache.init_empty();
 		}
 
 		out_geom.build_grid(*mesh, args["output"]["advanced"]["sol_on_grid"]);
@@ -1557,6 +1564,10 @@ namespace polyfem
 		else
 		{
 			mass_matrix_assembler->assemble(mesh->is_volume(), n_bases, bases, geom_bases(), mass_ass_vals_cache, 0, mass, true);
+			mass_matrix_assembler->use_density = false;
+			mass_matrix_assembler->assemble(mesh->is_volume(), n_bases, bases, geom_bases(), pure_mass_ass_vals_cache, 0, pure_mass, true);
+			pure_mass = lump_matrix(pure_mass);
+			mass_matrix_assembler->use_density = true;
 		}
 
 		assert(mass.size() > 0);
