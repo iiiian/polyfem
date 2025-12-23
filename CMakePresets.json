@@ -23,7 +23,9 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_FLAGS": "-g -fuse-ld=mold",
         "CMAKE_CUDA_ARCHITECTURES": "native",
-        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+        "POLYSOLVE_WITH_CUSOLVER": "ON",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON",
+        "IPC_TOOLKIT_WITH_CUDA": "ON"
       }
     },
     {
@@ -36,6 +38,7 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CUDA_ARCHITECTURES": "all-major",
         "POLYSOLVE_WITH_CUSOLVER": "ON",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON",
         "IPC_TOOLKIT_WITH_CUDA": "ON"
       }
     }

@@ -98,5 +98,5 @@ if(IPC_TOOLKIT_WITH_CUDA)
   # Nvidia V100 -> compute_70
   # Nvidia RTX8000 -> compute_75
   # Nvidia 3080Ti -> compute_86
-  set_target_properties(unit_tests PROPERTIES CUDA_ARCHITECTURES "70;75;86")
+  # set_target_properties(unit_tests PROPERTIES CUDA_ARCHITECTURES "70;75;86")
 endif()
