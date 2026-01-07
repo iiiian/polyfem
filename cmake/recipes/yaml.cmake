@@ -8,4 +8,4 @@ endif()
 message(STATUS "Third-party: creating target 'yaml-cpp::yaml-cpp'")
 
 include(CPM)
-CPMAddPackage("gh:jbeder/yaml-cpp#0.8.0")
+CPMAddPackage("gh:jbeder/yaml-cpp#65c1c270dbe7eec37b2df2531d7497c4eea79aee")

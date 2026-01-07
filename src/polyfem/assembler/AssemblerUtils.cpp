@@ -25,6 +25,7 @@
 #include <polyfem/assembler/Stokes.hpp>
 #include <polyfem/assembler/ViscousDamping.hpp>
 #include <polyfem/assembler/FixedCorotational.hpp>
+#include <polyfem/assembler/SimplifiedNeoHookeanElasticityAutodiff.hpp>
 
 #include <polyfem/utils/JSONUtils.hpp>
 #include <polyfem/utils/Logger.hpp>
@@ -78,6 +79,8 @@ namespace polyfem
 				return std::make_shared<SaintVenantElasticity>();
 			else if (formulation == "NeoHookean")
 				return std::make_shared<NeoHookeanElasticity>();
+			else if (formulation == "SimplifiedNeoHookean")
+				return std::make_shared<SimplifiedNeoHookeanAutodiff>();
 			else if (formulation == "IsochoricNeoHookean")
 				return std::make_shared<IsochoricNeoHookean>();
 			else if (formulation == "MooneyRivlin")
@@ -249,6 +252,7 @@ namespace polyfem
 				"HookeLinearElasticity",
 				"SaintVenant",
 				"NeoHookean",
+				"SimplifiedNeoHookean",
 				"MooneyRivlin",
 				"MooneyRivlin3Param",
 				"UnconstrainedOgden",

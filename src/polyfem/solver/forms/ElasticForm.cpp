@@ -330,7 +330,7 @@ namespace polyfem::solver
 		{
 			// NOTE: mat_cache_ is marked as mutable so we can modify it here
 			assembler_.assemble_hessian(
-				is_volume_, n_bases_, project_to_psd_, bases_,
+				is_volume_, n_bases_, true, bases_,
 				geom_bases_, ass_vals_cache_, t_, dt_, x, x_prev_, *mat_cache_, hessian);
 		}
 	}
