@@ -6,8 +6,8 @@
 #include <type_traits>
 #include <utility>
 
-#include <polyfem/utils/span.hpp>
-#include <polyfem/ecs/PackedArray.hpp>
+#include <polyfem/utils/std_shim/Span.hpp>
+#include <polyfem/utils/ecs/PackedArray.hpp>
 
 namespace polyfem::ecs
 {
@@ -108,7 +108,7 @@ namespace polyfem::ecs
 		/// @return Vector of ptr to components. nullptr if component is missing.
 		/// @warning Ptr might be invalidate after any add/remove operation of T.
 		template <typename T>
-		std::vector<T *> batch_get(tcb::span<const int> entities)
+		std::vector<T *> batch_get(Span<const int> entities)
 		{
 			static_assert((std::is_same_v<T, C> || ...),
 						  "T is not a component type, double check T appears as template argument in registry declaration.");
@@ -128,7 +128,7 @@ namespace polyfem::ecs
 		/// @return Vector of ptr to components. nullptr if component is missing.
 		/// @warning Ptr might be invalidate after any add/remove operation of T.
 		template <typename T>
-		std::vector<const T *> batch_get(tcb::span<const int> entities) const
+		std::vector<const T *> batch_get(Span<const int> entities) const
 		{
 			static_assert((std::is_same_v<T, C> || ...),
 						  "T is not a component type, double check T appears as template argument in registry declaration.");
@@ -145,7 +145,7 @@ namespace polyfem::ecs
 		/// @brief Return all components of type T.
 		/// @warning span might be invalid after any add/remove operation on component T.
 		template <typename T>
-		tcb::span<T> get_all_components()
+		Span<T> get_all_components()
 		{
 			static_assert((std::is_same_v<T, C> || ...),
 						  "T is not a component type, double check T appears as template argument in registry declaration.");
@@ -157,7 +157,7 @@ namespace polyfem::ecs
 		/// @brief Return all components of type T.
 		/// @warning span might be invalid after any add/remove operation on component T.
 		template <typename T>
-		tcb::span<const T> get_all_components() const
+		Span<const T> get_all_components() const
 		{
 			static_assert((std::is_same_v<T, C> || ...),
 						  "T is not a component type, double check T appears as template argument in registry declaration.");

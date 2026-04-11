@@ -60,6 +60,13 @@ set(SOURCES
 	svd/ImplicitQRSVD.h
 	svd/Tools.h
 	svd.hpp
+
+  # New
+  CudaUtils.hpp
+  vm/tinyexpr.h
+  vm/tinyexpr.c
+  vm/Program.hpp
+  vm/Program.cpp
 )
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})

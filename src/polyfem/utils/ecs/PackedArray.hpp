@@ -5,7 +5,7 @@
 #include <vector>
 #include <limits>
 
-#include <polyfem/utils/span.hpp>
+#include <polyfem/utils/std_shim/Span.hpp>
 
 namespace polyfem::ecs
 {
@@ -130,10 +130,10 @@ namespace polyfem::ecs
 		}
 
 		/// @brief Returns dense resource array.
-		tcb::span<T> data() { return data_; }
+		Span<T> data() { return data_; }
 
 		/// @brief Returns dense resource array.
-		tcb::span<const T> data() const { return data_; }
+		Span<const T> data() const { return data_; }
 	};
 
 } // namespace polyfem::ecs

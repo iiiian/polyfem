@@ -184,9 +184,7 @@ if (POLYFEM_WITH_CUDA)
   set(CMAKE_CUDA_STANDARD 17)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-  # Enalbe CUDA support for libraries.
-  set(IPC_TOOLKIT_WITH_CUDA ON)
-  set(POLYSOLVE_WITH_CUDA ON)
+  target_compile_definitions(polyfem PUBLIC POLYFEM_WITH_CUDA)
 endif()
 
 ################################################################################
@@ -198,6 +196,16 @@ if(WIN32)
     include(eigen)
     target_link_libraries(polyfem PUBLIC Eigen3::Eigen)
 endif()
+
+# CCCL
+if (POLYFEM_WITH_CUDA)
+  include(cccl)
+  target_link_libraries(polyfem PUBLIC CCCL::CCCL)
+endif()
+
+# span-lite
+include(spanlite)
+target_link_libraries(polyfem PUBLIC nonstd::span-lite)
 
 # polysolve
 include(polysolve)

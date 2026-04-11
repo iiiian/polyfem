@@ -1,4 +1,4 @@
 src/polyfem/autogen/**
 src/polyfem/utils/svd/ImplicitQRSVD.h
 src/polyfem/utils/span.hpp
-
+src/polyfem/utils/expression/tinyexpr.*
