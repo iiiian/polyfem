@@ -659,3 +659,12 @@ static void pn (const te_expr *n, int depth) {
 void te_print(const te_expr *n) {
     pn(n, 0);
 }
+
+const void* get_add_func_ptr()   { return (const void*)add; }
+const void* get_sub_func_ptr()   { return (const void*)sub; }
+const void* get_div_func_ptr()   { return (const void*)divide; }
+const void* get_neg_func_ptr()   { return (const void*)negate; }
+const void* get_comma_func_ptr() { return (const void*)comma; }
+const void* get_fac_func_ptr()   { return (const void*)fac; }
+const void* get_ncr_func_ptr()   { return (const void*)ncr; }
+const void* get_npr_func_ptr()   { return (const void*)npr; }
