@@ -1,5 +1,3 @@
-#pragma once
-
 #include <polyfem/utils/vm/Program.hpp>
 
 #ifdef POLYFEM_WITH_CUDA
@@ -326,11 +324,11 @@ namespace polyfem::utils::vm
 		}
 
 		d_constants = cu::make_buffer<double>(policy.stream, policy.mr, h_constants.size(), cu::no_init);
-		cu::copy_bytes(policy.stream, h_constants, d_constants);
+		cu::copy_bytes(policy.stream, h_constants, *d_constants);
 		h_constants.clear();
 
 		d_instructions = cu::make_buffer<Instruction>(policy.stream, policy.mr, h_instructions.size(), cu::no_init);
-		cu::copy_bytes(policy.stream, h_instructions, d_instructions);
+		cu::copy_bytes(policy.stream, h_instructions, *d_instructions);
 		h_instructions.clear();
 	}
 

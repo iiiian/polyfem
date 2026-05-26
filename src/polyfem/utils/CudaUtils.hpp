@@ -3,7 +3,7 @@
 #ifdef POLYFEM_WITH_CUDA
 
 #include <cuda/stream>
-#include <cuda/memory_resource>
+#include <cuda/memory_pool>
 
 #define __both__ __host__ __device__
 
@@ -20,7 +20,7 @@ namespace ctd = cuda::std;
 struct CudaPolicy
 {
 	cu::stream_ref stream;
-	cu::mr::resource_ref<cu::mr::device_accessible> mr;
+	cu::device_memory_pool_ref mr;
 };
 
 #else
