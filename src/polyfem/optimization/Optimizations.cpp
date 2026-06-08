@@ -65,12 +65,14 @@ namespace polyfem::solver
 
 	std::shared_ptr<polysolve::nonlinear::Solver> AdjointOptUtils::make_nl_solver(const json &solver_params, const json &linear_solver_params, const double characteristic_length)
 	{
+		const std::string solver_name = solver_params["solver"].get<std::string>();
+
 		auto names = polysolve::nonlinear::Solver::available_solvers();
-		if (std::find(names.begin(), names.end(), solver_params["solver"]) != names.end())
+		if (std::find(names.begin(), names.end(), solver_name) != names.end())
 			return polysolve::nonlinear::Solver::create(solver_params, linear_solver_params, characteristic_length, adjoint_logger());
 
 		names = polysolve::nonlinear::BoxConstraintSolver::available_solvers();
-		if (std::find(names.begin(), names.end(), solver_params["solver"]) != names.end())
+		if (std::find(names.begin(), names.end(), solver_name) != names.end())
 			return polysolve::nonlinear::BoxConstraintSolver::create(solver_params, linear_solver_params, characteristic_length, adjoint_logger());
 
 		log_and_throw_adjoint_error("Invalid nonlinear solver name!");
