@@ -166,11 +166,11 @@ namespace polyfem
 				Eigen::MatrixXi F;
 				build_mesh_matrices(V, F);
 				io::MshWriter::write(
-					resolve_output_path(fmt::format(args["output"]["data"]["rest_mesh"], t + t_offset)),
+					resolve_output_path(fmt::format(fmt::runtime(args["output"]["data"]["rest_mesh"].get<std::string>()), t + t_offset)),
 					V, F, mesh->get_body_ids(), mesh->is_volume(), /*binary=*/true);
 			}
 
-			const std::string &state_path = resolve_output_path(fmt::format(args["output"]["data"]["state"], t + t_offset));
+			const std::string &state_path = resolve_output_path(fmt::format(fmt::runtime(args["output"]["data"]["state"].get<std::string>()), t + t_offset));
 			if (!state_path.empty())
 				solve_data.time_integrator->save_state(state_path);
 

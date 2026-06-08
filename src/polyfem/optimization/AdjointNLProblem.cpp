@@ -335,7 +335,7 @@ namespace polyfem::solver
 
 			std::string vis_mesh_path = state->resolve_output_path(fmt::format("opt_state_{:d}_iter_{:d}.vtu", id, iter_num));
 			std::string mesh_ext = state->mesh->is_volume() ? ".msh" : ".obj";
-			std::string rest_mesh_path = state->resolve_output_path(fmt::format("opt_state_{:d}_iter_{:d}" + mesh_ext, id, iter_num));
+			std::string rest_mesh_path = state->resolve_output_path(fmt::format(fmt::runtime("opt_state_{:d}_iter_{:d}" + mesh_ext), id, iter_num));
 			id++;
 
 			if (!save_vtu)

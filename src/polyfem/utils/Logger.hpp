@@ -45,13 +45,13 @@ namespace polyfem
 	template <typename... Args>
 	[[noreturn]] void log_and_throw_error(const std::string &msg, const Args &...args)
 	{
-		log_and_throw_error(fmt::format(msg, args...));
+		log_and_throw_error(fmt::format(fmt::runtime(msg), args...));
 	}
 
 	template <typename... Args>
 	[[noreturn]] void log_and_throw_adjoint_error(const std::string &msg, const Args &...args)
 	{
-		log_and_throw_error(fmt::format(msg, args...));
+		log_and_throw_error(fmt::format(fmt::runtime(msg), args...));
 	}
 } // namespace polyfem
 

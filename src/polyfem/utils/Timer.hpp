@@ -96,12 +96,12 @@ namespace polyfem
 
 			inline void log_msg()
 			{
-				const static std::string log_fmt_text =
-					fmt::format("[{}] {{}} {{:.3g}}s", fmt::format(fmt::fg(fmt::terminal_color::magenta), "timing"));
+				const static std::string timing_text =
+					fmt::format(fmt::fg(fmt::terminal_color::magenta), "timing");
 
 				if (!m_name.empty())
 				{
-					logger().trace(log_fmt_text, m_name, getElapsedTimeInSec());
+					logger().trace("[{}] {} {:.3g}s", timing_text, m_name, getElapsedTimeInSec());
 				}
 			}
 

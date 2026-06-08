@@ -374,7 +374,7 @@ namespace polyfem
 
 			save_timestep(time, t + t_offset, t0, dt, sol, pressure);
 
-			const std::string &state_path = resolve_output_path(fmt::format(args["output"]["data"]["state"], t + t_offset));
+			const std::string &state_path = resolve_output_path(fmt::format(fmt::runtime(args["output"]["data"]["state"].get<std::string>()), t + t_offset));
 			if (!state_path.empty())
 				time_integrator->save_state(state_path);
 

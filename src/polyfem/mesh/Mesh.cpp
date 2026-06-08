@@ -174,7 +174,10 @@ namespace polyfem::mesh
 	{
 		if (!std::filesystem::exists(path))
 		{
-			logger().error(path.empty() ? "No mesh provided!" : "Mesh file does not exist: {}", path);
+			if (path.empty())
+				logger().error("No mesh provided!");
+			else
+				logger().error("Mesh file does not exist: {}", path);
 			return nullptr;
 		}
 

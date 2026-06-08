@@ -54,7 +54,7 @@ namespace polyfem
 			const std::string step_name = args["output"]["advanced"]["timestep_prefix"];
 
 			out_geom.save_vtu(
-				resolve_output_path(fmt::format(step_name + "{:d}.vtu", t)),
+				resolve_output_path(fmt::format(fmt::runtime(step_name + "{:d}.vtu"), t)),
 				*this, sol, pressure, time, dt,
 				io::OutGeometryData::ExportOptions(args,
 												   mesh->is_linear(),
@@ -64,7 +64,7 @@ namespace polyfem
 
 			out_geom.save_pvd(
 				resolve_output_path(args["output"]["paraview"]["file_name"]),
-				[step_name](int i) { return fmt::format(step_name + "{:d}.vtm", i); },
+				[step_name](int i) { return fmt::format(fmt::runtime(step_name + "{:d}.vtm"), i); },
 				t, t0, dt, args["output"]["paraview"]["skip_frame"].get<int>());
 		}
 	}
@@ -219,7 +219,7 @@ namespace polyfem
 		std::string rest_mesh_path = args["output"]["data"]["rest_mesh"].get<std::string>();
 		if (!rest_mesh_path.empty())
 		{
-			rest_mesh_path = resolve_output_path(fmt::format(args["output"]["data"]["rest_mesh"], global_t));
+			rest_mesh_path = resolve_output_path(fmt::format(fmt::runtime(args["output"]["data"]["rest_mesh"].get<std::string>()), global_t));
 
 			std::vector<json> patch;
 			if (args["geometry"].is_array())
@@ -273,11 +273,11 @@ namespace polyfem
 		restart_json["input"] = {{
 			"data",
 			{
-				{"state", resolve_output_path(fmt::format(args["output"]["data"]["state"], global_t))},
+				{"state", resolve_output_path(fmt::format(fmt::runtime(args["output"]["data"]["state"].get<std::string>()), global_t))},
 			},
 		}};
 
-		std::ofstream file(resolve_output_path(fmt::format(restart_json_path, global_t)));
+		std::ofstream file(resolve_output_path(fmt::format(fmt::runtime(restart_json_path), global_t)));
 		file << restart_json;
 	}
 } // namespace polyfem
