@@ -17,25 +17,44 @@ namespace polyfem::assembler
 	{
 	}
 
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-	Helmholtz::assemble(const LinearAssemblerData &data) const
+	template <int element_dim>
+	void Helmholtz::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
-		const Eigen::MatrixXd &gradi = data.vals.basis_values[data.i].grad_t_m;
-		const Eigen::MatrixXd &gradj = data.vals.basis_values[data.j].grad_t_m;
-
+		assert(local_element_matrix.size() == 1);
 		double res = 0;
-		for (int k = 0; k < gradi.rows(); ++k)
+		for (int q = 0; q < data.quad_num; ++q)
 		{
-			res += gradi.row(k).dot(gradj.row(k)) * data.da(k);
+			double x, y, z;
+			data.fill_phy_position<element_dim>(q, x, y, z);
+			double k = k_(x, y, z, data.time, data.element_id);
+
+			auto gradi = data.gather_basis_grad_phy<element_dim>(data.row_local_basis_id, q);
+			auto gradj = data.gather_basis_grad_phy<element_dim>(data.col_local_basis_id, q);
+			res += gradi.dot(gradj) * data.weighted_measure[q];
+			res -= data.gather_basis_value(data.row_local_basis_id, q)
+				   * data.gather_basis_value(data.col_local_basis_id, q)
+				   * data.weighted_measure[q] * k * k;
 		}
 
-		for (int k = 0; k < gradi.rows(); ++k)
-		{
-			const double tmp = k_(data.vals.val.row(k), data.t, data.vals.element_id);
-			res -= data.vals.basis_values[data.i].val(k) * data.vals.basis_values[data.j].val(k) * data.da[k] * tmp * tmp;
-		}
+		local_element_matrix[0] = res;
+	}
 
-		return Eigen::Matrix<double, 1, 1>::Constant(res);
+	void Helmholtz::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+	{
+		switch (data.elem_dim)
+		{
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
+		}
 	}
 
 	VectorNd Helmholtz::compute_rhs(const AutodiffHessianPt &pt) const

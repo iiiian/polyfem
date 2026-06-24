@@ -15,8 +15,7 @@ namespace polyfem::assembler
 
 		Helmholtz();
 
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 		VectorNd compute_rhs(const AutodiffHessianPt &pt) const override;
 
 		Eigen::Matrix<AutodiffScalarGrad, Eigen::Dynamic, 1, 0, 3, 1> kernel(const int dim, const AutodiffGradPt &rvect, const AutodiffScalarGrad &r) const override;
@@ -30,6 +29,9 @@ namespace polyfem::assembler
 		std::map<std::string, ParamFunc> parameters() const override;
 
 	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
+
 		GenericMatParam k_;
 	};
 } // namespace polyfem::assembler
