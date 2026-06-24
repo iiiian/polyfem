@@ -22,44 +22,59 @@ namespace polyfem
 	{
 		void LinearElasticity::add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path)
 		{
-			assert(size() == 2 || size() == 3);
+			assert(size() >= 1 && size() <= 3);
 
 			params_.add_multimaterial(index, params, size() == 3, units.stress(), root_path);
 		}
 
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		LinearElasticity::assemble(const LinearAssemblerData &data) const
+		template <int element_dim>
+		void LinearElasticity::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 		{
 			// mu ((gradi' gradj) Id + ((gradi gradj')') + lambda gradi *gradj';
-			const Eigen::MatrixXd &gradi = data.vals.basis_values[data.i].grad_t_m;
-			const Eigen::MatrixXd &gradj = data.vals.basis_values[data.j].grad_t_m;
+			assert(size() == element_dim);
+			assert(local_element_matrix.size() == size() * size());
 
-			Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res(size() * size());
-			res.setZero();
-
-			for (long k = 0; k < gradi.rows(); ++k)
+			for (int q = 0; q < data.quad_num; ++q)
 			{
-				Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res_k(size() * size());
-				//            res_k.setZero();
-				const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> outer = gradi.row(k).transpose() * gradj.row(k);
-				const double dot = gradi.row(k).dot(gradj.row(k));
-
 				double lambda, mu;
-				params_.lambda_mu(data.vals.quadrature.points.row(k), data.vals.val.row(k), data.t, data.vals.element_id, lambda, mu);
+				double x, y, z;
+				data.fill_phy_position<element_dim>(q, x, y, z);
+				params_.lambda_mu(0.0, 0.0, 0.0, x, y, z, data.time, data.element_id, lambda, mu);
+
+				auto gradi = data.gather_basis_grad_phy<element_dim>(data.row_local_basis_id, q);
+				auto gradj = data.gather_basis_grad_phy<element_dim>(data.col_local_basis_id, q);
+				Eigen::Matrix<double, element_dim, element_dim> outer = gradi * gradj.transpose();
+				double dot = gradi.dot(gradj);
 
 				for (int ii = 0; ii < size(); ++ii)
 				{
 					for (int jj = 0; jj < size(); ++jj)
 					{
-						res_k(jj * size() + ii) = outer(ii * size() + jj) * mu + outer(jj * size() + ii) * lambda;
+						double value = outer(ii, jj) * mu + outer(jj, ii) * lambda;
 						if (ii == jj)
-							res_k(jj * size() + ii) += mu * dot;
+							value += mu * dot;
+						local_element_matrix[ii * size() + jj] += value * data.weighted_measure[q];
 					}
 				}
-				res += res_k * data.da(k);
 			}
+		}
 
-			return res;
+		void LinearElasticity::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+		{
+			switch (data.elem_dim)
+			{
+			case 1:
+				assemble_element_impl<1>(data, local_element_matrix);
+				break;
+			case 2:
+				assemble_element_impl<2>(data, local_element_matrix);
+				break;
+			case 3:
+				assemble_element_impl<3>(data, local_element_matrix);
+				break;
+			default:
+				assert(false);
+			}
 		}
 
 		double LinearElasticity::compute_energy(const NonLinearAssemblerData &data) const

@@ -19,8 +19,7 @@ namespace polyfem::assembler
 		/// computes local stiffness matrix is R^{dim²} for bases i,j
 		// vals stores the evaluation for that element
 		// da contains both the quadrature weight and the change of metric in the integral
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		// compute elastic energy
 		double compute_energy(const NonLinearAssemblerData &data) const override;
@@ -82,6 +81,9 @@ namespace polyfem::assembler
 								  const std::function<Eigen::MatrixXd(const Eigen::MatrixXd &)> &fun) const override;
 
 	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
+
 		// class that stores and compute lame parameters per point
 		LameParameters params_;
 
