@@ -13,10 +13,9 @@ namespace polyfem::assembler
 	public:
 		using LinearAssembler::assemble;
 
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override
+		void assemble_element(const LinearElementAssemblyData &, span<double> local_element_matrix) const override
 		{
-			return Eigen::Matrix<double, 1, 1>::Zero(1, 1);
+			assert(local_element_matrix.size() == 1);
 		}
 
 		std::string name() const override { return "Bilaplacian"; }
@@ -44,10 +43,13 @@ namespace polyfem::assembler
 		using LinearAssembler::assemble;
 
 		// res is R
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		std::string name() const override { return "BilaplacianAux"; }
 		std::map<std::string, ParamFunc> parameters() const override { return std::map<std::string, ParamFunc>(); }
+
+	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
 	};
 } // namespace polyfem::assembler

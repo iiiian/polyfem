@@ -17,11 +17,36 @@ namespace polyfem::assembler
 		return Eigen::Matrix<double, 1, 1>::Constant(res);
 	}
 
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-	BilaplacianAux::assemble(const LinearAssemblerData &data) const
+	template <int element_dim>
+	void BilaplacianAux::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
-		const double tmp = (data.vals.basis_values[data.i].val.array() * data.vals.basis_values[data.j].val.array() * data.da.array()).sum();
-		return Eigen::Matrix<double, 1, 1>::Constant(tmp);
+		assert(local_element_matrix.size() == 1);
+		double tmp = 0;
+		for (int q = 0; q < data.quad_num; ++q)
+		{
+			tmp += data.gather_basis_value(data.row_local_basis_id, q)
+				   * data.gather_basis_value(data.col_local_basis_id, q)
+				   * data.weighted_measure[q];
+		}
+		local_element_matrix[0] = tmp;
+	}
+
+	void BilaplacianAux::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+	{
+		switch (data.elem_dim)
+		{
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
+		}
 	}
 
 } // namespace polyfem::assembler
