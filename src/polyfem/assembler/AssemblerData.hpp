@@ -124,6 +124,18 @@ namespace polyfem::assembler
 		}
 
 		template <int dim>
+		void fill_phy_position(int quadrature_point_id, double &x, double &y, double &z) const
+		{
+			int q = quadrature_point_id;
+			if constexpr (dim >= 1)
+				x = physical_x[q];
+			if constexpr (dim >= 2)
+				x = physical_y[q];
+			if constexpr (dim >= 3)
+				x = physical_z[q];
+		};
+
+		template <int dim>
 		Eigen::Matrix<double, dim, dim, Eigen::RowMajor> gather_J_inverse_transpose(int quadrature_point_id) const
 		{
 			const double *ptr = J_inverse_transpose.data() + quadrature_point_id * dim * dim;
