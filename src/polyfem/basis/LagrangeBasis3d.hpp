@@ -53,7 +53,7 @@ namespace polyfem
 				const bool has_polys,
 				const bool is_geom_bases,
 				const bool use_corner_quadrature,
-				std::vector<ElementBases> &bases,
+				ng::ElementBases &bases,
 				std::vector<mesh::LocalBoundary> &local_boundary,
 				std::map<int, InterfaceData> &poly_face_to_data,
 				std::shared_ptr<mesh::MeshNodes> &mesh_nodes);
@@ -93,7 +93,7 @@ namespace polyfem
 				const bool has_polys,
 				const bool is_geom_bases,
 				const bool use_corner_quadrature,
-				std::vector<ElementBases> &bases,
+				ng::ElementBases &bases,
 				std::vector<mesh::LocalBoundary> &local_boundary,
 				std::map<int, InterfaceData> &poly_face_to_data,
 				std::shared_ptr<mesh::MeshNodes> &mesh_nodes);

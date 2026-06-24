@@ -11,6 +11,8 @@ set(SOURCES
 	ActiveFiber.hpp
 	Bilaplacian.cpp
 	Bilaplacian.hpp
+  AssemblyCache.cpp
+	AssemblyCache.hpp
 	ElementAssemblyValues.cpp
 	ElementAssemblyValues.hpp
 	GenericElastic.cpp
@@ -81,6 +83,8 @@ set(SOURCES
 	VolumePenalty.cpp
 	SumModel.hpp
 	SumModel.cpp
+  ScatterLocalAssembly.cpp
+  ScatterLocalAssembly.hpp
 )
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})

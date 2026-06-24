@@ -583,6 +583,59 @@ namespace
 		});
 	}
 
+	// TODO: migrate to central dispatch func.
+	int lagrange_local_basis_count(const polyfem::basis::ng::BasisDesc &basis_desc)
+	{
+		if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Simplex)
+		{
+			int p = basis_desc.order;
+			return (p + 1) * (p + 2) / 2;
+		}
+		else if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Quad)
+		{
+			int q = basis_desc.order;
+			// serendipity.
+			if (q == -2)
+				return 8;
+			return (q + 1) * (q + 1);
+		}
+		else
+		{
+			assert(false);
+			return 0;
+		}
+	}
+
+	// TODO: migrate to central dispatch func.
+	/// @brief Evaluate lagrange basis value at a single point.
+	/// @param element_desc Element descriptor.
+	/// @param uv 2D parametric coordinate.
+	/// @param values Output basis value.
+	void evaluate_lagrange_basis_values(
+		const polyfem::basis::ng::ElementDesc &element_desc,
+		const Eigen::MatrixXd &uv,
+		Eigen::VectorXd &values)
+	{
+		const auto &basis_desc = element_desc.basis_desc;
+		assert(basis_desc.basis_family == polyfem::basis::ng::BasisFamily::Lagrange);
+
+		const int n_el_bases = lagrange_local_basis_count(basis_desc);
+		values.resize(n_el_bases);
+		Eigen::MatrixXd val;
+		for (int i = 0; i < n_el_bases; ++i)
+		{
+			if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Simplex)
+				autogen::p_basis_value_2d(basis_desc.is_bernstein, basis_desc.order, i, uv, val);
+			else if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Quad)
+				autogen::q_basis_value_2d(basis_desc.order, i, uv, val);
+			else
+				assert(false);
+
+			assert(val.size() == 1);
+			values(i) = val(0);
+		}
+	}
+
 	/// @brief      compute edge orders given element orders, assure basis continuity
 	///
 	/// @param[in]  mesh            Input ncmesh
@@ -683,7 +736,7 @@ int LagrangeBasis2d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	std::vector<ElementBases> &bases,
+	ng::ElementBases &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_edge_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -706,7 +759,7 @@ int LagrangeBasis2d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	std::vector<ElementBases> &bases,
+	ng::ElementBases &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_edge_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -731,16 +784,21 @@ int LagrangeBasis2d::build_bases(
 	compute_nodes(mesh, discr_orders, edge_orders, serendipity, has_polys, is_geom_bases, nodes, edge_virtual_nodes, element_nodes_id, local_boundary, poly_edge_to_data);
 	// boundary_nodes = nodes.boundary_nodes();
 
-	bases.resize(mesh.n_faces());
+	// Temp local to global dof id map
+	// element_dof_mappings[element id][local node id][mapping id]
+	// One basis might have multiple mappings which we will merge at the end.
+	std::vector<std::vector<std::vector<Local2Global>>> element_dof_mappings(mesh.n_faces());
 	std::vector<int> interface_elements;
 	interface_elements.reserve(mesh.n_faces());
 
 	for (int e = 0; e < mesh.n_faces(); ++e)
 	{
-		ElementBases &b = bases[e];
 		const int discr_order = discr_orders(e);
 		const int n_el_bases = element_nodes_id[e].size();
-		b.bases.resize(n_el_bases);
+		element_dof_mappings[e].resize(n_el_bases);
+		bases.element_desc.push_back(ng::ElementDesc{});
+		auto &element_desc = bases.element_desc.back();
+		element_desc.has_parameterization = !mesh.is_polytope(e);
 
 		bool skip_interface_element = false;
 
@@ -760,21 +818,39 @@ int LagrangeBasis2d::build_bases(
 			interface_elements.push_back(e);
 		}
 
+		for (int j = 0; j < n_el_bases; ++j)
+		{
+			const int global_index = element_nodes_id[e][j];
+			// If global_index >= 0, this is a real node. real node maps to solution node one-to-one.
+			if (global_index >= 0)
+			{
+				element_dof_mappings[e][j].emplace_back(global_index, nodes.node_position(global_index), 1.0);
+			}
+		}
+
 		if (mesh.is_cube(e))
 		{
+			// Build quadrature.
 			const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_order, AssemblerUtils::BasisType::CUBE_LAGRANGE, 2);
 			const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_order, AssemblerUtils::BasisType::CUBE_LAGRANGE, 2);
-			b.set_quadrature([real_order](Quadrature &quad) {
-				QuadQuadrature quad_quadrature;
-				quad_quadrature.get_quadrature(real_order, quad);
-			});
-			b.set_mass_quadrature([real_mass_order](Quadrature &quad) {
-				QuadQuadrature quad_quadrature;
-				quad_quadrature.get_quadrature(real_mass_order, quad);
-			});
-			// quad_quadrature.get_quadrature(real_order, b.quadrature);
 
-			b.set_local_node_from_primitive_func([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			Quadrature quad;
+			QuadQuadrature{}.get_quadrature(real_order, quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
+			QuadQuadrature{}.get_quadrature(real_mass_order, quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
+
+			// Build basis.
+			ng::BasisDesc &basis_desc = element_desc.basis_desc;
+			basis_desc.element_kind = polyfem::basis::ng::ElementKind::Quad;
+			basis_desc.basis_family = polyfem::basis::ng::BasisFamily::Lagrange;
+			basis_desc.order = serendipity ? -2 : discr_order;
+			basis_desc.orderq = basis_desc.order;
+			basis_desc.dim = 2;
+			basis_desc.is_bernstein = bernstein;
+
+			// Build legacy callbacks.
+			bases.legacy_local_nodes_form_primitive_callbacks.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 				auto index = mesh2d.get_index_from_face(e);
 
@@ -785,36 +861,44 @@ int LagrangeBasis2d::build_bases(
 					index = mesh2d.next_around_face(index);
 				}
 				assert(index.edge == primitive_id);
-				return quad_edge_local_nodes(discr_order, mesh2d, index);
+				return polyfem::basis::LagrangeBasis2d::quad_edge_local_nodes(discr_order, mesh2d, index);
 			});
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				const int global_index = element_nodes_id[e][j];
-
-				// if(!skip_interface_element)
-				b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-
-				const int dtmp = serendipity ? -2 : discr_order;
-
-				b.bases[j].set_basis([dtmp, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_basis_value_2d(dtmp, j, uv, val); });
-				b.bases[j].set_grad([dtmp, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_grad_basis_value_2d(dtmp, j, uv, val); });
-			}
 		}
 		else if (mesh.is_simplex(e))
 		{
+			// Build quadrature.
 			const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_order, AssemblerUtils::BasisType::SIMPLEX_LAGRANGE, 2);
 			const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_order, AssemblerUtils::BasisType::SIMPLEX_LAGRANGE, 2);
-			b.set_quadrature([real_order, use_corner_quadrature](Quadrature &quad) {
-				TriQuadrature tri_quadrature(use_corner_quadrature);
-				tri_quadrature.get_quadrature(real_order, quad);
-			});
-			b.set_mass_quadrature([real_mass_order, use_corner_quadrature](Quadrature &quad) {
-				TriQuadrature tri_quadrature(use_corner_quadrature);
-				tri_quadrature.get_quadrature(real_mass_order, quad);
-			});
 
-			b.set_local_node_from_primitive_func([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			Quadrature quad;
+			TriQuadrature{use_corner_quadrature}.get_quadrature(real_order, quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
+			TriQuadrature{use_corner_quadrature}.get_quadrature(real_mass_order, quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
+
+			// Build basis.
+			bool rational = is_geom_bases && mesh.is_rational() && !mesh.cell_weights(e).empty();
+			ng::BasisDesc &basis_desc = element_desc.basis_desc;
+			basis_desc.element_kind = polyfem::basis::ng::ElementKind::Simplex;
+			basis_desc.basis_family = rational ? ng::BasisFamily::Rational : ng::BasisFamily::Lagrange;
+			// We only support order 2 rational basis.
+			basis_desc.order = rational ? 2 : discr_order;
+			basis_desc.orderq = basis_desc.order;
+			basis_desc.dim = 2;
+			basis_desc.is_bernstein = bernstein;
+			if (rational)
+			{
+				auto &weight_storage = bases.basis_store.rational_weights;
+				int offset = weight_storage.size();
+				// We only support order 2. For 2d simplex order 2 equals 6 basis.
+				basis_desc.rational_weight_range = ng::Range{static_cast<int>(weight_storage.size()), 6};
+				const auto &cell_weights = mesh.cell_weights(e);
+				assert(cell_weights.size() == 6);
+				weight_storage.insert(weight_storage.end(), cell_weights.begin(), cell_weights.end());
+			}
+
+			// Build legacy callbacks.
+			bases.legacy_local_nodes_form_primitive_callbacks.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 				auto index = mesh2d.get_index_from_face(e);
 
@@ -825,105 +909,16 @@ int LagrangeBasis2d::build_bases(
 					index = mesh2d.next_around_face(index);
 				}
 				assert(index.edge == primitive_id);
-				return tri_edge_local_nodes(discr_order, mesh2d, index);
+				return polyfem::basis::LagrangeBasis2d::tri_edge_local_nodes(discr_order, mesh2d, index);
 			});
-
-			const bool rational = is_geom_bases && mesh.is_rational() && !mesh.cell_weights(e).empty();
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				const int global_index = element_nodes_id[e][j];
-
-				if (!skip_interface_element)
-				{
-					b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-				}
-
-				if (rational)
-				{
-					const auto &w = mesh.cell_weights(e);
-					assert(discr_order == 2);
-					assert(w.size() == 6);
-
-					b.bases[j].set_basis([bernstein, discr_order, j, w](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) {
-						autogen::p_basis_value_2d(bernstein, discr_order, j, uv, val);
-						Eigen::MatrixXd denom = val;
-						denom.setZero();
-						Eigen::MatrixXd tmp;
-
-						for (int k = 0; k < 6; ++k)
-						{
-							autogen::p_basis_value_2d(bernstein, discr_order, k, uv, tmp);
-							denom += w[k] * tmp;
-						}
-
-						val = (w[j] * val.array() / denom.array()).eval();
-					});
-
-					b.bases[j].set_grad([bernstein, discr_order, j, w](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) {
-						Eigen::MatrixXd b;
-						autogen::p_basis_value_2d(bernstein, discr_order, j, uv, b);
-						autogen::p_grad_basis_value_2d(bernstein, discr_order, j, uv, val);
-						Eigen::MatrixXd denom = b;
-						denom.setZero();
-						Eigen::MatrixXd denom_prime = val;
-						denom_prime.setZero();
-						Eigen::MatrixXd tmp;
-
-						for (int k = 0; k < 6; ++k)
-						{
-							autogen::p_basis_value_2d(bernstein, discr_order, k, uv, tmp);
-							denom += w[k] * tmp;
-
-							autogen::p_grad_basis_value_2d(bernstein, discr_order, k, uv, tmp);
-							denom_prime += w[k] * tmp;
-						}
-
-						val.col(0) = ((w[j] * val.col(0).array() * denom.array() - w[j] * b.array() * denom_prime.col(0).array()) / (denom.array() * denom.array())).eval();
-						val.col(1) = ((w[j] * val.col(1).array() * denom.array() - w[j] * b.array() * denom_prime.col(1).array()) / (denom.array() * denom.array())).eval();
-					});
-				}
-				else
-				{
-					// pick out basis functions using autogenerated code
-					b.bases[j].set_basis([bernstein, discr_order, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::p_basis_value_2d(bernstein, discr_order, j, uv, val); });
-					b.bases[j].set_grad([bernstein, discr_order, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::p_grad_basis_value_2d(bernstein, discr_order, j, uv, val); });
-				}
-			}
 		}
 		else
 		{
 			// Polygon bases are built later on
 		}
-
-#ifndef NDEBUG
-		if (mesh.is_conforming())
-		{
-			Eigen::MatrixXd uv(4, 2);
-			uv << 0.1, 0.1, 0.3, 0.3, 0.9, 0.01, 0.01, 0.9;
-			Eigen::MatrixXd dx(4, 1);
-			dx.setConstant(1e-6);
-			Eigen::MatrixXd uvdx = uv;
-			uvdx.col(0) += dx;
-			Eigen::MatrixXd uvdy = uv;
-			uvdy.col(1) += dx;
-			Eigen::MatrixXd grad, val, vdx, vdy;
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				b.bases[j].eval_grad(uv, grad);
-
-				b.bases[j].eval_basis(uv, val);
-				b.bases[j].eval_basis(uvdx, vdx);
-				b.bases[j].eval_basis(uvdy, vdy);
-
-				assert((grad.col(0) - (vdx - val) / 1e-6).norm() < 1e-4);
-				assert((grad.col(1) - (vdy - val) / 1e-6).norm() < 1e-4);
-			}
-		}
-#endif
 	}
 
+	// Build node mapping for virtual nodes.
 	if (!is_geom_bases)
 	{
 		if (!mesh.is_conforming())
@@ -967,7 +962,7 @@ int LagrangeBasis2d::build_bases(
 					continue;
 				for (const int e : bucket)
 				{
-					ElementBases &b = bases[e];
+					auto &b = element_dof_mappings[e];
 					const int discr_order = discr_orders(e);
 					const int n_el_bases = element_nodes_id[e].size();
 
@@ -976,7 +971,8 @@ int LagrangeBasis2d::build_bases(
 						const int global_index = element_nodes_id[e][j];
 
 						if (global_index >= 0)
-							b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
+							// Real nodes are already handled. Skip.
+							continue;
 						else
 						{
 							int large_edge = -1, local_edge = -1;
@@ -1029,19 +1025,19 @@ int LagrangeBasis2d::build_bases(
 									const double weight = basis_1d(edge_order, i + 1, x);
 									if (std::abs(weight) < 1e-12)
 										continue;
-									b.bases[j].global().emplace_back(global_index, nodes.node_position(global_index), weight);
+									b[j].emplace_back(global_index, nodes.node_position(global_index), weight);
 								}
 
-								const auto &global_1 = b.bases[local_edge].global();
-								const auto &global_2 = b.bases[(local_edge + 1) % 3].global();
+								const auto &global_1 = b[local_edge];
+								const auto &global_2 = b[(local_edge + 1) % 3];
 								double weight = basis_1d(edge_order, 0, x);
 								if (std::abs(weight) > 1e-12)
 									for (size_t ii = 0; ii < global_1.size(); ++ii)
-										b.bases[j].global().emplace_back(global_1[ii].index, global_1[ii].node, weight * global_1[ii].val);
+										b[j].emplace_back(global_1[ii].index, global_1[ii].node, weight * global_1[ii].val);
 								weight = basis_1d(edge_order, edge_order, x);
 								if (std::abs(weight) > 1e-12)
 									for (size_t ii = 0; ii < global_2.size(); ++ii)
-										b.bases[j].global().emplace_back(global_2[ii].index, global_2[ii].node, weight * global_2[ii].val);
+										b[j].emplace_back(global_2[ii].index, global_2[ii].node, weight * global_2[ii].val);
 							}
 							else
 							{
@@ -1096,26 +1092,27 @@ int LagrangeBasis2d::build_bases(
 								global_to_local(verts, global_position, node_position);
 
 								// evaluate the basis of the opposite element at this node
-								const auto &other_bases = bases[opposite_element];
-								std::vector<AssemblyValues> w;
-								other_bases.evaluate_bases(node_position, w);
+								Eigen::VectorXd w;
+								evaluate_lagrange_basis_values(
+									bases.element_desc[opposite_element],
+									node_position,
+									w);
 
 								// apply basis projection
 								for (long i = 0; i < w.size(); ++i)
 								{
-									assert(w[i].val.size() == 1);
-									if (std::abs(w[i].val(0)) < 1e-12)
+									if (std::abs(w(i)) < 1e-12)
 										continue;
 
-									for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+									const auto &other_global = element_dof_mappings[opposite_element][i];
+									for (size_t ii = 0; ii < other_global.size(); ++ii)
 									{
-										const auto &other_global = other_bases.bases[i].global()[ii];
-										b.bases[j].global().emplace_back(other_global.index, other_global.node, w[i].val(0) * other_global.val);
+										b[j].emplace_back(other_global[ii].index, other_global[ii].node, w(i) * other_global[ii].val);
 									}
 								}
 							}
 
-							auto &global_ = b.bases[j].global();
+							auto &global_ = b[j];
 							if (global_.size() <= 1)
 								continue;
 
@@ -1149,7 +1146,7 @@ int LagrangeBasis2d::build_bases(
 				// loop again over interface elements to address mismatched polynomial orders by constraining the higher order nodes
 				for (int e : interface_elements)
 				{
-					ElementBases &b = bases[e];
+					auto &b = element_dof_mappings[e];
 					const int discr_order = discr_orders(e);
 					const int n_el_bases = element_nodes_id[e].size();
 
@@ -1169,7 +1166,8 @@ int LagrangeBasis2d::build_bases(
 							const int global_index = element_nodes_id[e][j];
 
 							if (global_index >= 0)
-								b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
+								// Real nodes are already handled. Skip.
+								continue;
 							else
 							{
 								const auto le = -(global_index + 1);
@@ -1197,22 +1195,22 @@ int LagrangeBasis2d::build_bases(
 								else
 									assert(false);
 
-								const auto &other_bases = bases[other_face];
-								// Eigen::MatrixXd w;
-								std::vector<AssemblyValues> w;
-								other_bases.evaluate_bases(node_position, w);
+								Eigen::VectorXd w;
+								evaluate_lagrange_basis_values(
+									bases.element_desc[other_face],
+									node_position,
+									w);
 
 								for (long i = 0; i < w.size(); ++i)
 								{
-									assert(w[i].val.size() == 1);
-									if (std::abs(w[i].val(0)) < 1e-8)
+									if (std::abs(w(i)) < 1e-8)
 										continue;
 
-									for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+									const auto &other_global = element_dof_mappings[other_face][i];
+									for (size_t ii = 0; ii < other_global.size(); ++ii)
 									{
-										const auto &other_global = other_bases.bases[i].global()[ii];
-										// logger().trace("e {} j {} gid {}", e, j, other_global.index);
-										b.bases[j].global().emplace_back(other_global.index, other_global.node, w[i].val(0) * other_global.val);
+										// logger().trace("e {} j {} gid {}", e, j, other_global[ii].index);
+										b[j].emplace_back(other_global[ii].index, other_global[ii].node, w(i) * other_global[ii].val);
 									}
 								}
 							}
@@ -1224,6 +1222,40 @@ int LagrangeBasis2d::build_bases(
 					}
 				}
 			}
+		}
+	}
+
+	// Convert temp element_dof_mappings into SOA layout.
+	for (int e = 0; e < mesh.n_faces(); ++e)
+	{
+		auto &element_desc = bases.element_desc[e];
+		int n_el_bases = element_dof_mappings[e].size(); // local node counts.
+		int mapping_offset = bases.dof_mapping_store.mapping_desc.size();
+		element_desc.dof_mapping_range = ng::Range{mapping_offset, n_el_bases};
+
+		for (int j = 0; j < n_el_bases; ++j)
+		{
+			const auto &mapping = element_dof_mappings[e][j];
+			assert(!mapping.empty());
+
+			std::vector<int> node_ids;
+			std::vector<double> weights;
+			std::vector<double> node_positions;
+			int dim = element_desc.basis_desc.dim;
+
+			// Here each entry (a Local2Global class) represents one virtual to real mapping.
+			for (const auto &entry : mapping)
+			{
+				node_ids.push_back(entry.index);
+				weights.push_back(entry.val);
+				for (int d = 0; d < dim; ++d)
+				{
+					node_positions.push_back(entry.node(d));
+				}
+			}
+
+			int mapping_id = bases.dof_mapping_store.append(node_ids, weights, node_positions);
+			assert(mapping_id == mapping_offset + j);
 		}
 	}
 

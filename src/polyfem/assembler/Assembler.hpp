@@ -3,6 +3,8 @@
 #include <polyfem/Units.hpp>
 
 #include <polyfem/assembler/AssemblerData.hpp>
+#include <polyfem/assembler/AssemblyResult.hpp>
+#include <polyfem/assembler/AssemblyCache.hpp>
 #include <polyfem/assembler/AssemblyValsCache.hpp>
 
 #include <polyfem/utils/MatrixCache.hpp>
@@ -63,17 +65,14 @@ namespace polyfem::assembler
 		int size() const { return size_; }
 		virtual void set_size(const int size) { size_ = size; }
 
-		// assembler stiffness matrix, is the mesh is volumetric, number of bases and bases (FE and geom)
-		// gbases and bases can be the same (ie isoparametric)
+		// Assemble matrix from cached basis, gradient, and geometry values.
 		virtual void assemble(
-			const bool is_volume,
-			const int n_basis,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			StiffnessMatrix &stiffness,
-			const bool is_mass = false) const { log_and_throw_error("Assembler not implemented by {}!", name()); }
+			int global_dof_num,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			AssemblyResult &result) const { log_and_throw_error("Assembler not implemented by {}!", name()); }
 
 		// assemble energy
 		virtual double assemble_energy(
@@ -211,27 +210,19 @@ namespace polyfem::assembler
 		LinearAssembler();
 		virtual ~LinearAssembler() = default;
 
-		/// assembles the stiffness matrix for the given basis
-		/// the bilinear form (local assembler) is encoded by
-		/// the overloaded assemble (see below) function that
-		/// the subclass (eg Laplacian) defines
-		/// sets stiffness and modifies cache if it has not
-		/// already been computed
+		/// Assembles into a preallocated AssemblyResult for cached element data.
 		void assemble(
-			const bool is_volume,
-			const int n_basis,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			StiffnessMatrix &stiffness,
-			const bool is_mass = false) const override;
+			int global_dof_num,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			AssemblyResult &result) const override;
 
 		virtual bool is_linear() const override { return true; }
 
-		/// local assembly function that defines the bilinear form (LHS)
-		/// computes and returns a single local stiffness value
-		virtual Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> assemble(const LinearAssemblerData &data) const = 0;
+	protected:
+		virtual void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const = 0;
 	};
 
 	// non-linear assembler (eg neohookean elasticity)

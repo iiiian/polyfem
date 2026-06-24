@@ -27,6 +27,7 @@ using namespace polyfem::basis;
 using namespace polyfem::mesh;
 using namespace polyfem::quadrature;
 
+// clang-format off
 /*
 Axes:
   z y
@@ -56,10 +57,10 @@ e3  = (  0, 0,   0.5)
 e4  = (0.5,   0, 0.5)
 e5  = (  0, 0.5, 0.5)
 Corner nodes:
-	  v7──────x─────v6
-	  ╱┆     ╱      ╱│
-	 ╱ ┆    ╱      ╱ │
-	x┄┄┼┄┄┄x┄┄┄┄┄┄x  │
+      v7──────x─────v6
+      ╱┆     ╱      ╱│
+     ╱ ┆    ╱      ╱ │
+    x┄┄┼┄┄┄x┄┄┄┄┄┄x  │
    ╱   x  ╱      ╱┆  x
   ╱    ┆ ╱      ╱ ┆ ╱│
 v4─────┼x─────v5  ┆╱ │
@@ -80,9 +81,9 @@ v5 = (1, 0, 1)
 v6 = (1, 1, 1)
 v7 = (0, 1, 1)
 Edge nodes:
-	   x─────e10─────x
-	  ╱┆     ╱      ╱│
-	 ╱ ┆    ╱      ╱ │
+       x─────e10─────x
+      ╱┆     ╱      ╱│
+     ╱ ┆    ╱      ╱ │
    e11┄┼┄┄┄x┄┄┄┄┄e9  │
    ╱  e7  ╱      ╱┆ e6
   ╱    ┆ ╱      ╱ ┆ ╱│
@@ -108,10 +109,10 @@ e9  = (  1, 0.5,   1)
 e10 = (0.5,   1,   1)
 e11 = (  0, 0.5,   1)
 Face nodes:
-	  v7──────x─────v6
-	  ╱┆     ╱      ╱│
-	 ╱ ┆    ╱      ╱ │
-	x┄┄┼┄┄f5┄┄┄┄┄┄x  │
+      v7──────x─────v6
+      ╱┆     ╱      ╱│
+     ╱ ┆    ╱      ╱ │
+    x┄┄┼┄┄f5┄┄┄┄┄┄x  │
    ╱   x  ╱  f3  ╱┆  x
   ╱    ┆ ╱      ╱ ┆ ╱│
 v4─────┼x─────v5  ┆╱ │
@@ -130,6 +131,7 @@ f3  = (0.5,   1, 0.5)
 f4  = (0.5, 0.5,   0)
 f5  = (0.5, 0.5,   1)
 */
+// clang-format on
 
 namespace
 {
@@ -1147,6 +1149,66 @@ namespace
 				uv(i) = (vec.dot(edge)) / squared_length;
 			}
 		});
+	}
+
+	// TODO: migrate to central dispatch func.
+	int lagrange_local_basis_count(const polyfem::basis::ng::BasisDesc &basis_desc)
+	{
+		if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Simplex)
+		{
+			int p = basis_desc.order;
+			return (p + 1) * (p + 2) * (p + 3) / 6;
+		}
+		else if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Hex)
+		{
+			int q = basis_desc.order;
+			// serendipity.
+			if (q == -2)
+				return 20;
+			return (q + 1) * (q + 1) * (q + 1);
+		}
+		else if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Pyramid)
+		{
+			int p = basis_desc.order;
+			return (p + 1) * (p + 2) * (2 * p + 3) / 6;
+		}
+		else
+		{
+			assert(false);
+			return 0;
+		}
+	}
+
+	// TODO: migrate to central dispatch func.
+	/// @brief Evaluate lagrange basis value at a single point.
+	/// @param element_desc Element descriptor.
+	/// @param uv 3D parametric coordinate.
+	/// @param values Output basis value.
+	void evaluate_lagrange_basis_values(
+		const polyfem::basis::ng::ElementDesc &element_desc,
+		const Eigen::MatrixXd &uv,
+		Eigen::VectorXd &values)
+	{
+		const auto &basis_desc = element_desc.basis_desc;
+		assert(basis_desc.basis_family == polyfem::basis::ng::BasisFamily::Lagrange);
+
+		const int n_el_bases = lagrange_local_basis_count(basis_desc);
+		values.resize(n_el_bases);
+		Eigen::MatrixXd val;
+		for (int i = 0; i < n_el_bases; ++i)
+		{
+			if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Simplex)
+				autogen::p_basis_value_3d(basis_desc.is_bernstein, basis_desc.order, i, uv, val);
+			else if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Hex)
+				autogen::q_basis_value_3d(basis_desc.order, i, uv, val);
+			else if (basis_desc.element_kind == polyfem::basis::ng::ElementKind::Pyramid)
+				autogen::pyramid_basis_value_3d(basis_desc.order, i, uv, val);
+			else
+				assert(false);
+
+			assert(val.size() == 1);
+			values(i) = val(0);
+		}
 	}
 
 	bool check_edge_face_orders(const polyfem::mesh::NCMesh3D &mesh, const Eigen::VectorXi &elem_orders, const Eigen::VectorXi &edge_orders, const Eigen::VectorXi &face_orders)
@@ -2376,7 +2438,7 @@ int LagrangeBasis3d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	std::vector<ElementBases> &bases,
+	ng::ElementBases &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_face_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -2402,7 +2464,7 @@ int LagrangeBasis3d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	std::vector<ElementBases> &bases,
+	ng::ElementBases &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_face_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -2439,17 +2501,22 @@ int LagrangeBasis3d::build_bases(
 	compute_nodes(mesh, discr_ordersp, discr_ordersq, edge_orders, face_orders, serendipity, has_polys, is_geom_bases, nodes, edge_virtual_nodes, face_virtual_nodes, element_nodes_id, local_boundary, poly_face_to_data);
 	// boundary_nodes = nodes.boundary_nodes();
 
-	bases.resize(mesh.n_cells());
+	// Temp local to global dof id map
+	// element_dof_mappings[element id][local node id][mapping id]
+	// One basis might have multiple mappings which we will merge at the end.
+	std::vector<std::vector<std::vector<Local2Global>>> element_dof_mappings(mesh.n_cells());
 	std::vector<int> interface_elements;
 	interface_elements.reserve(mesh.n_faces());
 
 	for (int e = 0; e < mesh.n_cells(); ++e)
 	{
-		ElementBases &b = bases[e];
 		const int discr_order = discr_ordersp(e);
 		const int discr_orderq = discr_ordersq(e);
 		const int n_el_bases = (int)element_nodes_id[e].size();
-		b.bases.resize(n_el_bases);
+		element_dof_mappings[e].resize(n_el_bases);
+		bases.element_desc.push_back(ng::ElementDesc{});
+		auto &element_desc = bases.element_desc.back();
+		element_desc.has_parameterization = !mesh.is_polytope(e);
 
 		bool skip_interface_element = false;
 
@@ -2468,20 +2535,39 @@ int LagrangeBasis3d::build_bases(
 			interface_elements.push_back(e);
 		}
 
+		for (int j = 0; j < n_el_bases; ++j)
+		{
+			const int global_index = element_nodes_id[e][j];
+			// If global_index >= 0, this is a real node. real node maps to solution node one-to-one.
+			if (global_index >= 0)
+			{
+				element_dof_mappings[e][j].emplace_back(global_index, nodes.node_position(global_index), 1.0);
+			}
+		}
+
 		if (mesh.is_cube(e))
 		{
+			// Build quadrature.
 			const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_order, AssemblerUtils::BasisType::CUBE_LAGRANGE, 3);
 			const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_order, AssemblerUtils::BasisType::CUBE_LAGRANGE, 3);
-			b.set_quadrature([real_order](Quadrature &quad) {
-				HexQuadrature hex_quadrature;
-				hex_quadrature.get_quadrature(real_order, quad);
-			});
-			b.set_mass_quadrature([real_mass_order](Quadrature &quad) {
-				HexQuadrature hex_quadrature;
-				hex_quadrature.get_quadrature(real_mass_order, quad);
-			});
 
-			b.set_local_node_from_primitive_func([serendipity, discr_order, e](const int primitive_id, const Mesh &mesh) {
+			Quadrature quad;
+			HexQuadrature{}.get_quadrature(real_order, quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
+			HexQuadrature{}.get_quadrature(real_mass_order, quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
+
+			// Build basis.
+			ng::BasisDesc &basis_desc = element_desc.basis_desc;
+			basis_desc.element_kind = polyfem::basis::ng::ElementKind::Hex;
+			basis_desc.basis_family = polyfem::basis::ng::BasisFamily::Lagrange;
+			basis_desc.order = serendipity ? -2 : discr_order;
+			basis_desc.orderq = basis_desc.order;
+			basis_desc.dim = 3;
+			basis_desc.is_bernstein = bernstein;
+
+			// Build legacy callbacks.
+			bases.legacy_local_nodes_form_primitive_callbacks.push_back([serendipity, discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2494,34 +2580,32 @@ int LagrangeBasis3d::build_bases(
 				assert(index.face == primitive_id);
 				return hex_face_local_nodes(serendipity, discr_order, mesh3d, index);
 			});
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				const int global_index = element_nodes_id[e][j];
-
-				b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-
-				const int dtmp = serendipity ? -2 : discr_order;
-
-				b.bases[j].set_basis([dtmp, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_basis_value_3d(dtmp, j, uv, val); });
-				b.bases[j].set_grad([dtmp, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_grad_basis_value_3d(dtmp, j, uv, val); });
-			}
 		}
 		else if (mesh.is_simplex(e))
 		{
+			// Build quadrature.
 			const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_order, AssemblerUtils::BasisType::SIMPLEX_LAGRANGE, 3);
 			const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_order, AssemblerUtils::BasisType::SIMPLEX_LAGRANGE, 3);
 
-			b.set_quadrature([real_order, use_corner_quadrature](Quadrature &quad) {
-				TetQuadrature tet_quadrature(use_corner_quadrature);
-				tet_quadrature.get_quadrature(real_order, quad);
-			});
-			b.set_mass_quadrature([real_mass_order, use_corner_quadrature](Quadrature &quad) {
-				TetQuadrature tet_quadrature(use_corner_quadrature);
-				tet_quadrature.get_quadrature(real_mass_order, quad);
-			});
+			Quadrature quad;
+			TetQuadrature{use_corner_quadrature}.get_quadrature(real_order, quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
+			TetQuadrature{use_corner_quadrature}.get_quadrature(real_mass_order, quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
-			b.set_local_node_from_primitive_func([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			// Build basis.
+			const bool rational = is_geom_bases && mesh.is_rational() && !mesh.cell_weights(e).empty();
+			assert(!rational);
+			ng::BasisDesc &basis_desc = element_desc.basis_desc;
+			basis_desc.element_kind = polyfem::basis::ng::ElementKind::Simplex;
+			basis_desc.basis_family = rational ? ng::BasisFamily::Rational : ng::BasisFamily::Lagrange;
+			basis_desc.order = discr_order;
+			basis_desc.orderq = discr_order;
+			basis_desc.dim = 3;
+			basis_desc.is_bernstein = bernstein;
+
+			// Build legacy callbacks.
+			bases.legacy_local_nodes_form_primitive_callbacks.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2534,40 +2618,33 @@ int LagrangeBasis3d::build_bases(
 				assert(index.face == primitive_id);
 				return tet_face_local_nodes(discr_order, mesh3d, index);
 			});
-
-			const bool rational = is_geom_bases && mesh.is_rational() && !mesh.cell_weights(e).empty();
-			assert(!rational);
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				const int global_index = element_nodes_id[e][j];
-				if (!skip_interface_element)
-				{
-					b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-				}
-
-				b.bases[j].set_basis([bernstein, discr_order, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::p_basis_value_3d(bernstein, discr_order, j, uv, val); });
-				b.bases[j].set_grad([bernstein, discr_order, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::p_grad_basis_value_3d(bernstein, discr_order, j, uv, val); });
-			}
 		}
 		else if (mesh.is_prism(e))
 		{
+			// Build quadrature.
 			const int orderp = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_order, AssemblerUtils::BasisType::PRISM_LAGRANGE, 2);
 			const int orderq = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_orderq, AssemblerUtils::BasisType::PRISM_LAGRANGE, 1);
 
 			const int mass_orderp = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_order, AssemblerUtils::BasisType::PRISM_LAGRANGE, 2);
 			const int mass_orderq = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_orderq, AssemblerUtils::BasisType::PRISM_LAGRANGE, 1);
 
-			b.set_quadrature([orderp, orderq](Quadrature &quad) {
-				PrismQuadrature tet_quadrature;
-				tet_quadrature.get_quadrature(orderp, orderq, quad);
-			});
-			b.set_mass_quadrature([mass_orderp, mass_orderq](Quadrature &quad) {
-				PrismQuadrature tet_quadrature;
-				tet_quadrature.get_quadrature(mass_orderp, mass_orderq, quad);
-			});
+			Quadrature quad;
+			PrismQuadrature{}.get_quadrature(orderp, orderq, quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
+			PrismQuadrature{}.get_quadrature(mass_orderp, mass_orderq, quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
-			b.set_local_node_from_primitive_func([discr_order, discr_orderq, e](const int primitive_id, const Mesh &mesh) {
+			// Build basis.
+			ng::BasisDesc &basis_desc = element_desc.basis_desc;
+			basis_desc.element_kind = polyfem::basis::ng::ElementKind::Prism;
+			basis_desc.basis_family = polyfem::basis::ng::BasisFamily::Lagrange;
+			basis_desc.order = discr_order;
+			basis_desc.orderq = discr_orderq;
+			basis_desc.dim = 3;
+			basis_desc.is_bernstein = bernstein;
+
+			// Build legacy callbacks.
+			bases.legacy_local_nodes_form_primitive_callbacks.push_back([discr_order, discr_orderq, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2580,34 +2657,29 @@ int LagrangeBasis3d::build_bases(
 				assert(index.face == primitive_id);
 				return prism_face_local_nodes(discr_order, discr_orderq, mesh3d, index);
 			});
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				const int global_index = element_nodes_id[e][j];
-				if (!skip_interface_element)
-				{
-					b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-				}
-
-				b.bases[j].set_basis([discr_order, discr_orderq, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::prism_basis_value_3d(discr_order, discr_orderq, j, uv, val); });
-				b.bases[j].set_grad([discr_order, discr_orderq, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::prism_grad_basis_value_3d(discr_order, discr_orderq, j, uv, val); });
-			}
 		}
 		else if (mesh.is_pyramid(e))
 		{
+			// Build quadrature.
 			const int orderp = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, discr_order, AssemblerUtils::BasisType::PYRAMID_LAGRANGE, 2);
 			const int mass_orderp = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", discr_order, AssemblerUtils::BasisType::PYRAMID_LAGRANGE, 2);
 
-			b.set_quadrature([orderp](Quadrature &quad) {
-				PyramidQuadrature tet_quadrature;
-				tet_quadrature.get_quadrature(orderp, quad);
-			});
-			b.set_mass_quadrature([mass_orderp](Quadrature &quad) {
-				PyramidQuadrature p_quadrature;
-				p_quadrature.get_quadrature(mass_orderp, quad);
-			});
+			Quadrature quad;
+			PyramidQuadrature{}.get_quadrature(orderp, quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
+			PyramidQuadrature{}.get_quadrature(mass_orderp, quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
-			b.set_local_node_from_primitive_func([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			// Build basis.
+			ng::BasisDesc &basis_desc = element_desc.basis_desc;
+			basis_desc.element_kind = polyfem::basis::ng::ElementKind::Pyramid;
+			basis_desc.basis_family = polyfem::basis::ng::BasisFamily::Lagrange;
+			basis_desc.order = discr_order;
+			basis_desc.dim = 3;
+			basis_desc.is_bernstein = bernstein;
+
+			// Build legacy callbacks.
+			bases.legacy_local_nodes_form_primitive_callbacks.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2620,18 +2692,6 @@ int LagrangeBasis3d::build_bases(
 				assert(index.face == primitive_id);
 				return pyramid_face_local_nodes(discr_order, mesh3d, index);
 			});
-
-			for (int j = 0; j < n_el_bases; ++j)
-			{
-				const int global_index = element_nodes_id[e][j];
-				if (!skip_interface_element)
-				{
-					b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-				}
-
-				b.bases[j].set_basis([discr_order, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::pyramid_basis_value_3d(discr_order, j, uv, val); });
-				b.bases[j].set_grad([discr_order, j](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::pyramid_grad_basis_value_3d(discr_order, j, uv, val); });
-			}
 		}
 		else
 		{
@@ -2685,7 +2745,7 @@ int LagrangeBasis3d::build_bases(
 					for (int e_aux = start; e_aux < end; e_aux++)
 					{
 						const int e = bucket[e_aux];
-						ElementBases &b = bases[e];
+						auto &b = element_dof_mappings[e];
 						const int discr_order = discr_ordersp(e);
 						const int n_edge_nodes = discr_order - 1;
 						const int n_face_nodes = (discr_order - 1) * (discr_order - 2) / 2;
@@ -2732,9 +2792,8 @@ int LagrangeBasis3d::build_bases(
 							const int global_index = element_nodes_id[e][j];
 
 							if (global_index >= 0)
-							{
-								b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
-							}
+								// Real nodes are already handled. Skip.
+								continue;
 							else
 							{
 								// vertex node - hanging vertex
@@ -2764,23 +2823,23 @@ int LagrangeBasis3d::build_bases(
 									global_to_local(large_elem_verts, verts.row(j), node_position);
 
 									// evaluate the basis of the large element at this node
-									const auto &other_bases = bases[large_elem];
-									std::vector<AssemblyValues> w;
-									other_bases.evaluate_bases(node_position, w);
+									Eigen::VectorXd w;
+									evaluate_lagrange_basis_values(
+										bases.element_desc[large_elem],
+										node_position,
+										w);
 
 									// apply basis projection
 									for (long i = 0; i < w.size(); ++i)
 									{
-										assert(w[i].val.size() == 1);
-										if (std::abs(w[i].val(0)) < 1e-12)
+										if (std::abs(w(i)) < 1e-12)
 											continue;
 
-										assert(other_bases.bases[i].global().size() > 0);
-										for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+										const auto &other_global = element_dof_mappings[large_elem][i];
+										for (size_t ii = 0; ii < other_global.size(); ++ii)
 										{
-											const auto &other_global = other_bases.bases[i].global()[ii];
-											assert(other_global.index >= 0);
-											b.bases[j].global().emplace_back(other_global.index, other_global.node, w[i].val(0) * other_global.val);
+											assert(other_global[ii].index >= 0);
+											b[j].emplace_back(other_global[ii].index, other_global[ii].node, w(i) * other_global[ii].val);
 										}
 									}
 								}
@@ -2862,14 +2921,14 @@ int LagrangeBasis3d::build_bases(
 											const double weight = basis_1d(edge_orders[edge_id], basis_id, point_weight(0));
 											if (std::abs(weight) < 1e-12)
 												continue;
-											b.bases[j].global().emplace_back(global_index, nodes.node_position(global_index), weight);
+											b[j].emplace_back(global_index, nodes.node_position(global_index), weight);
 										}
 
 										// contribution to vertex nodes
 										for (int i = 0; i < 2; i++)
 										{
 											const int lv = ev(local_edge_id, i);
-											const auto &global_ = b.bases[lv].global();
+											const auto &global_ = b[lv];
 											Eigen::VectorXd node_weight;
 											global_to_local_edge(edge_verts, verts.row(lv), node_weight);
 											const int basis_id = std::lround(node_weight(0) * edge_orders[edge_id]);
@@ -2878,7 +2937,7 @@ int LagrangeBasis3d::build_bases(
 											{
 												assert(global_.size() > 0);
 												for (size_t ii = 0; ii < global_.size(); ++ii)
-													b.bases[j].global().emplace_back(global_[ii].index, global_[ii].node, weight * global_[ii].val);
+													b[j].emplace_back(global_[ii].index, global_[ii].node, weight * global_[ii].val);
 											}
 										}
 									}
@@ -2892,23 +2951,23 @@ int LagrangeBasis3d::build_bases(
 										global_to_local(large_elem_verts, global_position, local_position);
 
 										// evaluate the basis of the large element at this node
-										const auto &other_bases = bases[large_elem];
-										std::vector<AssemblyValues> w;
-										other_bases.evaluate_bases(local_position, w);
+										Eigen::VectorXd w;
+										evaluate_lagrange_basis_values(
+											bases.element_desc[large_elem],
+											local_position,
+											w);
 
 										// apply basis projection
 										for (long i = 0; i < w.size(); ++i)
 										{
-											assert(w[i].val.size() == 1);
-											if (std::abs(w[i].val(0)) < 1e-12)
+											if (std::abs(w(i)) < 1e-12)
 												continue;
 
-											assert(other_bases.bases[i].global().size() > 0);
-											for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+											const auto &other_global = element_dof_mappings[large_elem][i];
+											for (size_t ii = 0; ii < other_global.size(); ++ii)
 											{
-												const auto &other_global = other_bases.bases[i].global()[ii];
-												assert(other_global.index >= 0);
-												b.bases[j].global().emplace_back(other_global.index, other_global.node, w[i].val(0) * other_global.val);
+												assert(other_global[ii].index >= 0);
+												b[j].emplace_back(other_global[ii].index, other_global[ii].node, w(i) * other_global[ii].val);
 											}
 										}
 									}
@@ -2986,13 +3045,13 @@ int LagrangeBasis3d::build_bases(
 											const double weight = basis_2d(face_orders[face_id], x, y, face_weight);
 											if (std::abs(weight) < 1e-12)
 												continue;
-											b.bases[j].global().emplace_back(global_, nodes.node_position(global_), weight);
+											b[j].emplace_back(global_, nodes.node_position(global_), weight);
 										}
 
 										// contribution to vertex nodes
 										for (int i = 0; i < 3; i++)
 										{
-											const auto &global_ = b.bases[fv(local_face_id, i)].global();
+											const auto &global_ = b[fv(local_face_id, i)];
 											auto low_order_node = ncmesh.point(fv(local_face_id, i));
 											Eigen::MatrixXd low_order_node_face_weight;
 											global_to_local_face(face_verts, low_order_node, low_order_node_face_weight);
@@ -3002,7 +3061,7 @@ int LagrangeBasis3d::build_bases(
 											{
 												assert(global_.size() > 0);
 												for (size_t ii = 0; ii < global_.size(); ++ii)
-													b.bases[j].global().emplace_back(global_[ii].index, global_[ii].node, weight * global_[ii].val);
+													b[j].emplace_back(global_[ii].index, global_[ii].node, weight * global_[ii].val);
 											}
 										}
 
@@ -3030,23 +3089,23 @@ int LagrangeBasis3d::build_bases(
 
 												{
 													// evaluate the basis of the large element at this node
-													const auto &other_bases = bases[e];
-													std::vector<AssemblyValues> w;
-													other_bases.evaluate_bases(local_pos, w);
+													Eigen::VectorXd w;
+													evaluate_lagrange_basis_values(
+														bases.element_desc[e],
+														local_pos,
+														w);
 
 													// apply basis projection
 													for (long i = 0; i < w.size(); ++i)
 													{
-														assert(w[i].val.size() == 1);
-														if (std::abs(w[i].val(0)) < 1e-12)
+														if (std::abs(w(i)) < 1e-12)
 															continue;
 
-														assert(other_bases.bases[i].global().size() > 0);
-														for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+														const auto &other_global = element_dof_mappings[e][i];
+														for (size_t ii = 0; ii < other_global.size(); ++ii)
 														{
-															const auto &other_global = other_bases.bases[i].global()[ii];
-															assert(other_global.index >= 0);
-															b.bases[j].global().emplace_back(other_global.index, other_global.node, step1.val * w[i].val(0) * other_global.val);
+															assert(other_global[ii].index >= 0);
+															b[j].emplace_back(other_global[ii].index, other_global[ii].node, step1.val * w(i) * other_global[ii].val);
 														}
 													}
 												}
@@ -3063,23 +3122,23 @@ int LagrangeBasis3d::build_bases(
 										global_to_local(large_elem_verts, global_position, local_position);
 
 										// evaluate the basis of the large element at this node
-										const auto &other_bases = bases[large_elem];
-										std::vector<AssemblyValues> w;
-										other_bases.evaluate_bases(local_position, w);
+										Eigen::VectorXd w;
+										evaluate_lagrange_basis_values(
+											bases.element_desc[large_elem],
+											local_position,
+											w);
 
 										// apply basis projection
 										for (long i = 0; i < w.size(); ++i)
 										{
-											assert(w[i].val.size() == 1);
-											if (std::abs(w[i].val(0)) < 1e-12)
+											if (std::abs(w(i)) < 1e-12)
 												continue;
 
-											assert(other_bases.bases[i].global().size() > 0);
-											for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+											const auto &other_global = element_dof_mappings[large_elem][i];
+											for (size_t ii = 0; ii < other_global.size(); ++ii)
 											{
-												const auto &other_global = other_bases.bases[i].global()[ii];
-												assert(other_global.index >= 0);
-												b.bases[j].global().emplace_back(other_global.index, other_global.node, w[i].val(0) * other_global.val);
+												assert(other_global[ii].index >= 0);
+												b[j].emplace_back(other_global[ii].index, other_global[ii].node, w(i) * other_global[ii].val);
 											}
 										}
 									}
@@ -3087,7 +3146,7 @@ int LagrangeBasis3d::build_bases(
 								else
 									assert(false);
 
-								auto &global_ = b.bases[j].global();
+								auto &global_ = b[j];
 								if (global_.size() <= 1)
 									continue;
 
@@ -3122,7 +3181,7 @@ int LagrangeBasis3d::build_bases(
 			{
 				for (int e : interface_elements)
 				{
-					ElementBases &b = bases[e];
+					auto &b = element_dof_mappings[e];
 					// todo non conforming
 					const int discr_order = discr_ordersp(e);
 					const int n_el_bases = element_nodes_id[e].size();
@@ -3142,7 +3201,8 @@ int LagrangeBasis3d::build_bases(
 							const int global_index = element_nodes_id[e][j];
 
 							if (global_index >= 0)
-								b.bases[j].init(discr_order, global_index, j, nodes.node_position(global_index));
+								// Real nodes are already handled. Skip.
+								continue;
 							else
 							{
 								const int lnn = max_p > 2 ? (discr_order - 2) : 0;
@@ -3284,25 +3344,24 @@ int LagrangeBasis3d::build_bases(
 								else
 									assert(false);
 
-								const auto &other_bases = bases[other_cell];
-								// Eigen::MatrixXd w;
-								std::vector<AssemblyValues> w;
-								other_bases.evaluate_bases(node_position, w);
+								Eigen::VectorXd w;
+								evaluate_lagrange_basis_values(
+									bases.element_desc[other_cell],
+									node_position,
+									w);
 
-								assert(b.bases[j].global().size() == 0);
+								assert(b[j].empty());
 
 								for (long i = 0; i < w.size(); ++i)
 								{
-									assert(w[i].val.size() == 1);
-									if (std::abs(w[i].val(0)) < 1e-8)
+									if (std::abs(w(i)) < 1e-8)
 										continue;
 
-									// assert(other_bases.bases[i].global().size() == 1);
-									for (size_t ii = 0; ii < other_bases.bases[i].global().size(); ++ii)
+									const auto &other_global = element_dof_mappings[other_cell][i];
+									for (size_t ii = 0; ii < other_global.size(); ++ii)
 									{
-										const auto &other_global = other_bases.bases[i].global()[ii];
-										// logger().trace("e {} j {} gid {}", e, j, other_global.index);
-										b.bases[j].global().emplace_back(other_global.index, other_global.node, w[i].val(0) * other_global.val);
+										// logger().trace("e {} j {} gid {}", e, j, other_global[ii].index);
+										b[j].emplace_back(other_global[ii].index, other_global[ii].node, w(i) * other_global[ii].val);
 									}
 								}
 							}
@@ -3319,6 +3378,40 @@ int LagrangeBasis3d::build_bases(
 					}
 				}
 			}
+		}
+	}
+
+	// Convert temp element_dof_mappings into SOA layout.
+	for (int e = 0; e < mesh.n_cells(); ++e)
+	{
+		auto &element_desc = bases.element_desc[e];
+		int n_el_bases = element_dof_mappings[e].size(); // local node counts.
+		int mapping_offset = bases.dof_mapping_store.mapping_desc.size();
+		element_desc.dof_mapping_range = ng::Range{mapping_offset, n_el_bases};
+
+		for (int j = 0; j < n_el_bases; ++j)
+		{
+			const auto &mapping = element_dof_mappings[e][j];
+			assert(!mapping.empty());
+
+			std::vector<int> node_ids;
+			std::vector<double> weights;
+			std::vector<double> node_positions;
+			int dim = element_desc.basis_desc.dim;
+
+			// Here each entry (a Local2Global class) represents one virtual to real mapping.
+			for (const auto &entry : mapping)
+			{
+				node_ids.push_back(entry.index);
+				weights.push_back(entry.val);
+				for (int d = 0; d < dim; ++d)
+				{
+					node_positions.push_back(entry.node(d));
+				}
+			}
+
+			int mapping_id = bases.dof_mapping_store.append(node_ids, weights, node_positions);
+			assert(mapping_id == mapping_offset + j);
 		}
 	}
 

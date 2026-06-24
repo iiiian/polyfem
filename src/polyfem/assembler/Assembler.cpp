@@ -2,10 +2,14 @@
 
 #include <polyfem/utils/Logger.hpp>
 #include <polyfem/utils/MaybeParallelFor.hpp>
+#include <polyfem/assembler/ScatterLocalAssembly.hpp>
 
 #include <igl/Timer.h>
 
 #include <ipc/utils/eigen_ext.hpp>
+
+#include <algorithm>
+#include <array>
 
 namespace polyfem::assembler
 {
@@ -92,6 +96,13 @@ namespace polyfem::assembler
 				val = 0;
 			}
 		};
+
+		struct LinearAssemblerThreadLocalStorage
+		{
+			AssemblyCache temp_cache;
+			GeomMappingScratch temp_geom_scratch;
+			std::vector<Eigen::Triplet<double, int>> missing_triplets;
+		};
 	} // namespace
 
 	void Assembler::set_materials(const std::vector<int> &body_ids, const json &body_params, const Units &units, const std::string &root_path)
@@ -155,232 +166,118 @@ namespace polyfem::assembler
 	}
 
 	void LinearAssembler::assemble(
-		const bool is_volume,
-		const int n_basis,
-		const std::vector<ElementBases> &bases,
-		const std::vector<ElementBases> &gbases,
-		const AssemblyValsCache &cache,
-		const double t,
-		StiffnessMatrix &stiffness,
-		const bool is_mass) const
+		int global_dof_num,
+		const basis::ng::ElementBasesView &solution_bases,
+		const basis::ng::ElementBasesView &geom_bases,
+		const AssemblyCacheView &assembly_cache,
+		double time,
+		AssemblyResult &result) const
 	{
 		assert(size() > 0);
+		assert(size() * size() <= 9);
+		assert(global_dof_num >= 0);
+		assert(assembly_cache.desc.size() == solution_bases.element_desc.size());
 
-		const long int max_triplets_size = long(1e7);
-		const long int buffer_size = std::min(long(max_triplets_size), long(n_basis) * size());
-		// #ifdef POLYFEM_WITH_TBB
-		// 		buffer_size /= tbb::task_scheduler_init::default_num_threads();
-		// #endif
-		// logger().trace("buffer_size {}", buffer_size);
+		BlockCSRMatrix &bsr = result.bsr;
+
 		try
 		{
-			stiffness.resize(n_basis * size(), n_basis * size());
-			stiffness.setZero();
+			auto storage = create_thread_storage(LinearAssemblerThreadLocalStorage{});
 
-			auto storage = create_thread_storage(LocalThreadMatStorage(buffer_size, stiffness.rows(), stiffness.cols()));
-
-			const int n_bases = int(bases.size());
+			int element_num = solution_bases.element_desc.size();
 			igl::Timer timer;
 			timer.start();
-			assert(cache.is_mass() == is_mass);
 
-			// (potentially parallel) loop over elements
-			// Note that n_bases is the number of elements since ach ElementBases object stores
-			// all local basis functions on a given element
-			maybe_parallel_for(n_bases, [&](int start, int end, int thread_id) {
-				LocalThreadMatStorage &local_storage = get_local_thread_storage(storage, thread_id);
+			maybe_parallel_for(element_num, [&](int start, int end, int thread_id) {
+				LinearAssemblerThreadLocalStorage &local_storage =
+					get_local_thread_storage(storage, thread_id);
 
 				for (int e = start; e < end; ++e)
 				{
-					ElementAssemblyValues &vals = local_storage.vals;
-					// igl::Timer timer; timer.start();
-					// vals.compute(e, is_volume, bases[e], gbases[e]);
-
-					// compute geometric mapping
-					// evaluate and store basis functions/their gradients at quadrature points
-					cache.compute(e, is_volume, bases[e], gbases[e], vals);
-
-					const Quadrature &quadrature = vals.quadrature;
-
-					assert(MAX_QUAD_POINTS == -1 || quadrature.weights.size() < MAX_QUAD_POINTS);
-					local_storage.da = vals.det.array() * quadrature.weights.array();
-					const int n_loc_bases = int(vals.basis_values.size());
-
-					for (int i = 0; i < n_loc_bases; ++i)
+					LinearElementAssemblyData data;
+					auto &element_desc = solution_bases.element_desc[e];
+					int dim = element_desc.basis_desc.dim;
+					int basis_num = basis::ng::local_basis_num(element_desc.basis_desc);
+					auto &cache_desc = assembly_cache.desc[e];
+					if (cache_desc.is_empty)
 					{
-						// const AssemblyValues &values_i = vals.basis_values[i];
-						// const Eigen::MatrixXd &gradi = values_i.grad_t_m;
-						const auto &global_i = vals.basis_values[i].global;
-
-						// loop over other bases up to the current one, taking advantage of symmetry
-						for (int j = 0; j <= i; ++j)
-						{
-							// const AssemblyValues &values_j = vals.basis_values[j];
-							// const Eigen::MatrixXd &gradj = values_j.grad_t_m;
-							const auto &global_j = vals.basis_values[j].global;
-
-							// compute local entry in stiffness matrix
-							const auto stiffness_val = assemble(LinearAssemblerData(vals, t, i, j, local_storage.da));
-							assert(stiffness_val.size() == size() * size());
-
-							// igl::Timer t1; t1.start();
-							// loop over dimensions of the problem
-							for (int n = 0; n < size(); ++n)
-							{
-								for (int m = 0; m < size(); ++m)
-								{
-									const double local_value = stiffness_val(n * size() + m);
-
-									// loop over the global nodes corresponding to local element (useful for non-conforming cases)
-									for (size_t ii = 0; ii < global_i.size(); ++ii)
-									{
-										const auto gi = global_i[ii].index * size() + m;
-										const auto wi = global_i[ii].val;
-
-										for (size_t jj = 0; jj < global_j.size(); ++jj)
-										{
-											const auto gj = global_j[jj].index * size() + n;
-											const auto wj = global_j[jj].val;
-
-											// add local value to the global matrix (weighted by corresponding nodes)
-											local_storage.cache->add_value(e, gi, gj, local_value * wi * wj);
-											if (j < i)
-											{
-												local_storage.cache->add_value(e, gj, gi, local_value * wj * wi);
-											}
-
-											if (local_storage.cache->entries_size() >= max_triplets_size)
-											{
-												local_storage.cache->prune();
-												logger().trace("cleaning memory. Current storage: {}. mat nnz: {}", local_storage.cache->capacity(), local_storage.cache->non_zeros());
-											}
-										}
-									}
-								}
-							}
-
-							// t1.stop();
-							// if (!vals.has_parameterization) { logger().trace("-- t1: " {}, t1.getElapsedTime()); }
-						}
+						local_storage.temp_cache.reset();
+						compute_assembly_cache_single(
+							solution_bases,
+							geom_bases,
+							e,
+							false,
+							false,
+							true,
+							true,
+							local_storage.temp_geom_scratch,
+							local_storage.temp_cache);
+						data = LinearElementAssemblyData{e, 0, 0, 0, dim, basis_num, time, local_storage.temp_cache.view()};
+					}
+					else
+					{
+						data = LinearElementAssemblyData{e, e, 0, 0, dim, basis_num, time, assembly_cache};
 					}
 
-					// timer.stop();
-					// if (!vals.has_parameterization) { logger().trace("-- Timer: {}", timer.getElapsedTime()); }
+					auto dof_mapping = solution_bases.dof_mapping;
+
+					std::array<double, 9> element_matrix_storage;
+					span<double> element_matrix(element_matrix_storage.data(), size() * size());
+
+					for (int i = 0; i < data.basis_num; ++i)
+					{
+						for (int j = 0; j <= i; ++j)
+						{
+							data.row_local_basis_id = i;
+							data.col_local_basis_id = j;
+
+							std::fill(element_matrix.begin(), element_matrix.end(), 0.0);
+							assemble_element(data, element_matrix);
+
+							const int row_mapping_id = element_desc.dof_mapping_range.offset + i;
+							const int col_mapping_id = element_desc.dof_mapping_range.offset + j;
+							scatter_local_assembly(row_mapping_id, col_mapping_id, dof_mapping, element_matrix.data(), size(), bsr, local_storage.missing_triplets);
+							if (j < i)
+							{
+								scatter_local_assembly(
+									col_mapping_id,
+									row_mapping_id,
+									dof_mapping,
+									element_matrix.data(),
+									size(),
+									bsr,
+									local_storage.missing_triplets,
+									true);
+							}
+						}
+					}
 				}
 			});
 
 			timer.stop();
-			logger().trace("done separate assembly {}s...", timer.getElapsedTime());
-
-			// Assemble the stiffness matrix by concatenating the tuples in each local storage
-
-			// Collect thread storages
-			std::vector<LocalThreadMatStorage *> storages(storage.size());
-			long int index = 0;
-			for (auto &local_storage : storage)
-			{
-				storages[index++] = &local_storage;
-			}
+			logger().trace("done BSR assembly {}s...", timer.getElapsedTime());
 
 			timer.start();
-			maybe_parallel_for(storages.size(), [&](int i) {
-				storages[i]->cache->prune();
-			});
-			timer.stop();
-			logger().trace("done pruning triplets {}s...", timer.getElapsedTime());
-
-			// Prepares for parallel concatenation
-			std::vector<long int> offsets(storage.size());
-
-			index = 0;
-			long int triplet_count = 0;
+			std::size_t missing_triplet_count = 0;
 			for (auto &local_storage : storage)
 			{
-				offsets[index++] = triplet_count;
-				triplet_count += local_storage.cache->triplet_count();
+				missing_triplet_count += local_storage.missing_triplets.size();
 			}
 
-			std::vector<Eigen::Triplet<double>> triplets;
-
-			assert(storages.size() >= 1);
-			if (storages[0]->cache->is_dense())
+			result.triplets.reserve(result.triplets.size() + missing_triplet_count);
+			for (auto &local_storage : storage)
 			{
-				timer.start();
-				// Serially merge local storages
-				Eigen::MatrixXd tmp(stiffness);
-				for (const LocalThreadMatStorage &local_storage : storage)
-					tmp += dynamic_cast<const DenseMatrixCache &>(*local_storage.cache).mat();
-				stiffness = tmp.sparseView();
-				stiffness.makeCompressed();
-				timer.stop();
-
-				logger().trace("Serial assembly time: {}s...", timer.getElapsedTime());
+				auto &t = local_storage.missing_triplets;
+				result.triplets.insert(result.triplets.end(), t.begin(), t.end());
+				t = {};
 			}
-			else if (triplet_count >= triplets.max_size())
-			{
-				// Serial fallback version in case the vector of triplets cannot be allocated
-
-				logger().warn("Cannot allocate space for triplets, switching to serial assembly.");
-
-				timer.start();
-				// Serially merge local storages
-				for (LocalThreadMatStorage &local_storage : storage)
-					stiffness += local_storage.cache->get_matrix(false); // will also prune
-				stiffness.makeCompressed();
-				timer.stop();
-
-				logger().trace("Serial assembly time: {}s...", timer.getElapsedTime());
-			}
-			else
-			{
-				timer.start();
-				triplets.resize(triplet_count);
-				timer.stop();
-
-				logger().trace("done allocate triplets {}s...", timer.getElapsedTime());
-				logger().trace("Triplets Count: {}", triplet_count);
-
-				timer.start();
-				// Parallel copy into triplets
-				maybe_parallel_for(storages.size(), [&](int i) {
-					const SparseMatrixCache &cache = dynamic_cast<const SparseMatrixCache &>(*storages[i]->cache);
-					long int offset = offsets[i];
-
-					std::copy(cache.entries().begin(), cache.entries().end(), triplets.begin() + offset);
-					offset += cache.entries().size();
-
-					if (cache.mat().nonZeros() > 0)
-					{
-						long int count = 0;
-						for (int k = 0; k < cache.mat().outerSize(); ++k)
-						{
-							for (Eigen::SparseMatrix<double>::InnerIterator it(cache.mat(), k); it; ++it)
-							{
-								assert(count < cache.mat().nonZeros());
-								triplets[offset + count++] = Eigen::Triplet<double>(it.row(), it.col(), it.value());
-							}
-						}
-					}
-				});
-
-				timer.stop();
-				logger().trace("done concatenate triplets {}s...", timer.getElapsedTime());
-
-				timer.start();
-				// Sort and assemble
-				stiffness.setFromTriplets(triplets.begin(), triplets.end());
-				timer.stop();
-
-				logger().trace("done setFromTriplets assembly {}s...", timer.getElapsedTime());
-			}
+			timer.stop();
+			logger().trace("done concatenating BSR miss triplets {}s...", timer.getElapsedTime());
 		}
 		catch (std::bad_alloc &ba)
 		{
 			log_and_throw_error("bad alloc {}", ba.what());
 		}
-
-		// stiffness.resize(n_basis*size(), n_basis*size());
-		// stiffness.setFromTriplets(entries.begin(), entries.end());
 	}
 
 	MixedAssembler::MixedAssembler()
