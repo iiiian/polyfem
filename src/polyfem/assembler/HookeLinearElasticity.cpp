@@ -1,6 +1,10 @@
 #include "HookeLinearElasticity.hpp"
 
+#include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Core/util/Constants.h>
 #include <polyfem/autogen/auto_elasticity_rhs.hpp>
+
+#include <array>
 
 namespace polyfem::assembler
 {
@@ -20,13 +24,12 @@ namespace polyfem::assembler
 
 		template <int dim>
 		Eigen::Matrix<double, dim, dim> strain(
-			const Eigen::MatrixXd &grad,
-			const Eigen::MatrixXd &jac_it,
-			int k, int coo)
+			const Eigen::Matrix<double, dim, 1> &grad,
+			const Eigen::Matrix<double, dim, dim, Eigen::RowMajor> &jac_it,
+			int coo)
 		{
-			Eigen::Matrix<double, dim, dim> jac;
-			jac.setZero();
-			jac.row(coo) = grad.row(k);
+			auto jac = Eigen::Matrix<double, dim, dim>::Zero();
+			jac.row(coo) = grad.transpose();
 			jac = jac * jac_it;
 
 			return strain_from_disp_grad(jac);
@@ -86,27 +89,28 @@ namespace polyfem::assembler
 		fiber_direction_.resize(size);
 	}
 
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-	HookeLinearElasticity::assemble(const LinearAssemblerData &data) const
+	template <int element_dim>
+	void HookeLinearElasticity::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
-		const Eigen::MatrixXd &gradi = data.vals.basis_values[data.i].grad;
-		const Eigen::MatrixXd &gradj = data.vals.basis_values[data.j].grad;
-
 		// (C : gradi) : gradj
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res(size() * size());
-		res.setZero();
-		assert(gradi.cols() == size());
-		assert(gradj.cols() == size());
-		assert(size_t(gradi.rows()) == data.vals.jac_it.size());
+		assert(size() == element_dim);
+		assert(local_element_matrix.size() == size() * size());
 
-		for (long k = 0; k < gradi.rows(); ++k)
+		for (int q = 0; q < data.quad_num; ++q)
 		{
 			Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res_k(size() * size());
 
 			ElasticityTensor elasticity_tensor;
 			if (fiber_direction_.has_rotation())
 			{
-				const auto fdir_mtx_voigt = fiber_direction_.stiffness_rotation_voigt(data.vals.quadrature.points.row(k), data.vals.val.row(k), data.t, data.vals.element_id);
+				double x, y, z;
+				data.fill_phy_position<element_dim>(q, x, y, z);
+
+				auto fdir_mtx_voigt = fiber_direction_.stiffness_rotation_voigt(
+					0.0, 0.0, 0.0,
+					x, y, z,
+					data.time,
+					data.element_id);
 
 				elasticity_tensor = elasticity_tensor_;
 				elasticity_tensor.rotate_stiffness(fdir_mtx_voigt);
@@ -116,13 +120,24 @@ namespace polyfem::assembler
 				elasticity_tensor = elasticity_tensor_;
 			}
 
-			if (size() == 2)
-			{
-				const Eigen::Matrix2d eps_x_i = strain<2>(gradi, data.vals.jac_it[k], k, 0);
-				const Eigen::Matrix2d eps_y_i = strain<2>(gradi, data.vals.jac_it[k], k, 1);
+			auto gradi = data.gather_basis_grad<element_dim>(data.row_local_basis_id, q);
+			auto gradj = data.gather_basis_grad<element_dim>(data.col_local_basis_id, q);
+			auto J_it = data.gather_J_inverse_transpose<element_dim>(q);
 
-				const Eigen::Matrix2d eps_x_j = strain<2>(gradj, data.vals.jac_it[k], k, 0);
-				const Eigen::Matrix2d eps_y_j = strain<2>(gradj, data.vals.jac_it[k], k, 1);
+			if constexpr (element_dim == 1)
+			{
+				const Eigen::Matrix<double, 1, 1> eps_x_i = strain<1>(gradi, J_it, 0);
+				const Eigen::Matrix<double, 1, 1> eps_x_j = strain<1>(gradj, J_it, 0);
+				res_k[0] = elasticity_tensor(0, 0) * eps_x_i(0, 0) * eps_x_j(0, 0);
+			}
+			else if constexpr (element_dim == 2)
+			{
+
+				const Eigen::Matrix2d eps_x_i = strain<2>(gradi, J_it, 0);
+				const Eigen::Matrix2d eps_y_i = strain<2>(gradi, J_it, 1);
+
+				const Eigen::Matrix2d eps_x_j = strain<2>(gradj, J_it, 0);
+				const Eigen::Matrix2d eps_y_j = strain<2>(gradj, J_it, 1);
 
 				std::array<double, 3> e_x, e_y;
 				e_x[0] = eps_x_i(0, 0);
@@ -149,13 +164,13 @@ namespace polyfem::assembler
 			}
 			else
 			{
-				const Eigen::Matrix3d eps_x_i = strain<3>(gradi, data.vals.jac_it[k], k, 0);
-				const Eigen::Matrix3d eps_y_i = strain<3>(gradi, data.vals.jac_it[k], k, 1);
-				const Eigen::Matrix3d eps_z_i = strain<3>(gradi, data.vals.jac_it[k], k, 2);
+				const Eigen::Matrix3d eps_x_i = strain<3>(gradi, J_it, 0);
+				const Eigen::Matrix3d eps_y_i = strain<3>(gradi, J_it, 1);
+				const Eigen::Matrix3d eps_z_i = strain<3>(gradi, J_it, 2);
 
-				const Eigen::Matrix3d eps_x_j = strain<3>(gradj, data.vals.jac_it[k], k, 0);
-				const Eigen::Matrix3d eps_y_j = strain<3>(gradj, data.vals.jac_it[k], k, 1);
-				const Eigen::Matrix3d eps_z_j = strain<3>(gradj, data.vals.jac_it[k], k, 2);
+				const Eigen::Matrix3d eps_x_j = strain<3>(gradj, J_it, 0);
+				const Eigen::Matrix3d eps_y_j = strain<3>(gradj, J_it, 1);
+				const Eigen::Matrix3d eps_z_j = strain<3>(gradj, J_it, 2);
 
 				std::array<double, 6> e_x, e_y, e_z;
 				e_x[0] = eps_x_i(0, 0);
@@ -207,10 +222,27 @@ namespace polyfem::assembler
 				res_k(8) = (sigma_z * eps_z_j).trace();
 			}
 
-			res += res_k * data.da(k);
+			for (int component_id = 0; component_id < size() * size(); ++component_id)
+				local_element_matrix[component_id] += res_k[component_id] * data.weighted_measure[q];
 		}
+	}
 
-		return res;
+	void HookeLinearElasticity::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+	{
+		switch (data.elem_dim)
+		{
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
+		}
 	}
 
 	void HookeLinearElasticity::assign_stress_tensor(

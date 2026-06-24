@@ -19,8 +19,7 @@ namespace polyfem::assembler
 		HookeLinearElasticity();
 
 		// res is R^{dim²}
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		// compute elastic energy
 		double compute_energy(const NonLinearAssemblerData &data) const override;
@@ -52,6 +51,9 @@ namespace polyfem::assembler
 	private:
 		ElasticityTensor elasticity_tensor_;
 		FiberDirection fiber_direction_;
+
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
 
 		// aux function that computes energy
 		// double compute_energy is the same with T=double
