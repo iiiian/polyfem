@@ -14,8 +14,7 @@ namespace polyfem::assembler
 		/// computes and returns local stiffness matrix (1x1) for
 		/// bases i,j (where i,j is passed in through data)
 		/// ie integral of phi_i * phi_j on the given element
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		/// uses autodiff to compute the rhs for a fabricated solution
 		/// in this case it just return pt.getHessian().trace()
@@ -32,6 +31,9 @@ namespace polyfem::assembler
 		virtual std::map<std::string, ParamFunc> parameters() const override;
 
 	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
+
 		// class that stores and compute density per point
 		Density density_;
 	};
@@ -44,8 +46,7 @@ namespace polyfem::assembler
 		/// computes and returns local stiffness matrix (1x1) for
 		/// bases i,j (where i,j is passed in through data)
 		/// ie integral of phi_i * phi_j on the given element
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		virtual std::map<std::string, ParamFunc> parameters() const override
 		{
@@ -54,5 +55,9 @@ namespace polyfem::assembler
 		}
 
 		std::string name() const override { return "HRZMass"; }
+
+	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
 	};
 } // namespace polyfem::assembler

@@ -2,24 +2,43 @@
 
 namespace polyfem::assembler
 {
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> Mass::assemble(const LinearAssemblerData &data) const
+	template <int element_dim>
+	void Mass::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
+		assert(local_element_matrix.size() == size() * size());
 		double tmp = 0;
 
-		// loop over quadrature points
-		for (int q = 0; q < data.da.size(); ++q)
+		for (int q = 0; q < data.quad_num; ++q)
 		{
-			const double rho = density_(data.vals.quadrature.points.row(q), data.vals.val.row(q), data.t, data.vals.element_id);
-			// phi_i * phi_j weighted by quadrature weights
-			tmp += rho * data.vals.basis_values[data.i].val(q) * data.vals.basis_values[data.j].val(q) * data.da(q);
+			double x, y, z;
+			data.fill_phy_position<element_dim>(q, x, y, z);
+			const double rho = density_(0.0, 0.0, 0.0, x, y, z, data.time, data.element_id);
+			tmp += rho
+				   * data.gather_basis_value(data.row_local_basis_id, q)
+				   * data.gather_basis_value(data.col_local_basis_id, q)
+				   * data.weighted_measure[q];
 		}
 
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res(size() * size(), 1);
-		res.setZero();
 		for (int i = 0; i < size(); ++i)
-			res(i * size() + i) = tmp;
+			local_element_matrix[i * size() + i] = tmp;
+	}
 
-		return res;
+	void Mass::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+	{
+		switch (data.elem_dim)
+		{
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
+		}
 	}
 
 	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 3, 1> Mass::compute_rhs(const AutodiffHessianPt &pt) const
@@ -45,32 +64,32 @@ namespace polyfem::assembler
 		return res;
 	}
 
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> HRZMass::assemble(const LinearAssemblerData &data) const
+	template <int element_dim>
+	void HRZMass::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res(size() * size(), 1);
-		res.setZero();
+		assert(local_element_matrix.size() == size() * size());
 
-		if (data.i != data.j)
-			return res;
+		if (data.row_local_basis_id != data.col_local_basis_id)
+			return;
 
 		double sum_all_entries = 0;
 		double sum_all_diag_entries = 0;
 		double sum_target_diag_entries = 0;
 
-		for (int i = 0; i < data.vals.basis_values.size(); ++i)
+		for (int i = 0; i < data.basis_num; ++i)
 		{
-			for (int j = 0; j < data.vals.basis_values.size(); ++j)
+			for (int j = 0; j < data.basis_num; ++j)
 			{
 				double entry = 0;
-				for (int q = 0; q < data.da.size(); ++q)
+				for (int q = 0; q < data.quad_num; ++q)
 				{
-					entry += data.vals.basis_values[i].val(q) * data.vals.basis_values[j].val(q) * data.da(q);
+					entry += data.gather_basis_value(i, q) * data.gather_basis_value(j, q) * data.weighted_measure[q];
 				}
 				sum_all_entries += entry;
 				if (i == j)
 				{
 					sum_all_diag_entries += entry;
-					if (i == data.i)
+					if (i == data.row_local_basis_id)
 					{
 						sum_target_diag_entries += entry;
 					}
@@ -79,9 +98,25 @@ namespace polyfem::assembler
 		}
 
 		for (int i = 0; i < size(); ++i)
-			res(i * size() + i) = sum_all_entries / sum_all_diag_entries * sum_target_diag_entries;
+			local_element_matrix[i * size() + i] = sum_all_entries / sum_all_diag_entries * sum_target_diag_entries;
+	}
 
-		return res;
+	void HRZMass::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+	{
+		switch (data.elem_dim)
+		{
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
+		}
 	}
 
 } // namespace polyfem::assembler
