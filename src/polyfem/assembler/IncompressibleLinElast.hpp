@@ -14,8 +14,7 @@ namespace polyfem::assembler
 	public:
 		using LinearAssembler::assemble;
 		// res is R^{dim²}
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		void add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path) override;
 		void set_params(const LameParameters &params) { params_ = params; }
@@ -32,6 +31,9 @@ namespace polyfem::assembler
 								  const std::function<Eigen::MatrixXd(const Eigen::MatrixXd &)> &fun) const override;
 
 	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
+
 		LameParameters params_;
 	};
 
@@ -56,8 +58,7 @@ namespace polyfem::assembler
 		using LinearAssembler::assemble;
 
 		// res is R^{1}
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		void add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path) override;
 		void set_params(const LameParameters &params) { params_ = params; }
@@ -72,6 +73,9 @@ namespace polyfem::assembler
 		}
 
 	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
+
 		LameParameters params_;
 		int disp_size_ = 0;
 	};
