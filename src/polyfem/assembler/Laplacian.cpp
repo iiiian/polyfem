@@ -8,21 +8,38 @@ namespace polyfem::assembler
 		{
 			return (i == j) ? true : false;
 		}
+
+		template <int dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix)
+		{
+			assert(local_element_matrix.size() == 1);
+			double res = 0;
+			for (int q = 0; q < data.quad_num; ++q)
+			{
+				auto gradi = data.gather_basis_grad_phy<dim>(data.row_local_basis_id, q);
+				auto gradj = data.gather_basis_grad_phy<dim>(data.col_local_basis_id, q);
+				res += gradi.dot(gradj) * data.weighted_measure[q];
+			}
+			local_element_matrix[0] = res;
+		}
 	} // namespace
 
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> Laplacian::assemble(const LinearAssemblerData &data) const
+	void Laplacian::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
-		const Eigen::MatrixXd &gradi = data.vals.basis_values[data.i].grad_t_m;
-		const Eigen::MatrixXd &gradj = data.vals.basis_values[data.j].grad_t_m;
-		// return ((gradi.array() * gradj.array()).rowwise().sum().array() * da.array()).colwise().sum();
-		double res = 0;
-		assert(gradi.rows() == data.da.size());
-		for (int k = 0; k < gradi.rows(); ++k)
+		switch (data.elem_dim)
 		{
-			// compute grad(phi_i) dot grad(phi_j) weighted by quadrature weights
-			res += gradi.row(k).dot(gradj.row(k)) * data.da(k);
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
 		}
-		return Eigen::Matrix<double, 1, 1>::Constant(res);
 	}
 
 	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 3, 1> Laplacian::compute_rhs(const AutodiffHessianPt &pt) const
