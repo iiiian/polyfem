@@ -8,31 +8,49 @@ namespace polyfem::assembler
 	}
 	void StokesVelocity::add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path)
 	{
-		assert(size() == 2 || size() == 3);
+		assert(size() >= 1 && size() <= 3);
 
 		viscosity_.add_multimaterial(index, params, units.viscosity(), root_path);
 	}
 
-	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-	StokesVelocity::assemble(const LinearAssemblerData &data) const
+	template <int element_dim>
+	void StokesVelocity::assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
 	{
 		// (gradi : gradj)  = <gradi, gradj> * Id
 
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> res(size() * size());
-		res.setZero();
-
-		const Eigen::MatrixXd &gradi = data.vals.basis_values[data.i].grad_t_m;
-		const Eigen::MatrixXd &gradj = data.vals.basis_values[data.j].grad_t_m;
+		assert(local_element_matrix.size() == size() * size());
 		double dot = 0;
-		for (int k = 0; k < gradi.rows(); ++k)
+		for (int q = 0; q < data.quad_num; ++q)
 		{
-			dot += gradi.row(k).dot(gradj.row(k)) * data.da(k) * viscosity_(data.vals.val.row(k), data.t, data.vals.element_id);
+			double x, y, z;
+			data.fill_phy_position<element_dim>(q, x, y, z);
+			double viscosity = viscosity_(x, y, z, data.time, data.element_id);
+
+			auto gradi = data.gather_basis_grad_phy<element_dim>(data.row_local_basis_id, q);
+			auto gradj = data.gather_basis_grad_phy<element_dim>(data.col_local_basis_id, q);
+			dot += gradi.dot(gradj) * data.weighted_measure[q] * viscosity;
 		}
 
 		for (int d = 0; d < size(); ++d)
-			res(d * size() + d) = dot;
+			local_element_matrix[d * size() + d] = dot;
+	}
 
-		return res;
+	void StokesVelocity::assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const
+	{
+		switch (data.elem_dim)
+		{
+		case 1:
+			assemble_element_impl<1>(data, local_element_matrix);
+			break;
+		case 2:
+			assemble_element_impl<2>(data, local_element_matrix);
+			break;
+		case 3:
+			assemble_element_impl<3>(data, local_element_matrix);
+			break;
+		default:
+			assert(false);
+		}
 	}
 
 	VectorNd StokesVelocity::compute_rhs(const AutodiffHessianPt &pt) const

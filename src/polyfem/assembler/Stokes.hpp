@@ -17,8 +17,7 @@ namespace polyfem::assembler
 
 		VectorNd compute_rhs(const AutodiffHessianPt &pt) const override;
 		// res is R^{dim²}
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override;
+		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		void add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path) override;
 
@@ -31,6 +30,9 @@ namespace polyfem::assembler
 		bool is_tensor() const override { return true; }
 
 	private:
+		template <int element_dim>
+		void assemble_element_impl(const LinearElementAssemblyData &data, span<double> local_element_matrix) const;
+
 		GenericMatParam viscosity_;
 	};
 
@@ -58,10 +60,9 @@ namespace polyfem::assembler
 		std::map<std::string, ParamFunc> parameters() const override { return std::map<std::string, ParamFunc>(); }
 
 		// res is R^{dim²}
-		Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>
-		assemble(const LinearAssemblerData &data) const override
+		void assemble_element(const LinearElementAssemblyData &, span<double> local_element_matrix) const override
 		{
-			return Eigen::Matrix<double, 1, 1>::Zero(1, 1);
+			assert(local_element_matrix.size() == 1);
 		}
 
 		bool is_fluid() const override { return true; }
