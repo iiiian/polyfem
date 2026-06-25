@@ -1,5 +1,7 @@
 #include "NavierStokes.hpp"
 
+#include <algorithm>
+
 namespace polyfem::assembler
 {
 
@@ -34,15 +36,13 @@ namespace polyfem::assembler
 		return res;
 	}
 
-	Eigen::VectorXd
-	NavierStokesVelocity::assemble_gradient(const NonLinearAssemblerData &data) const
+	void NavierStokesVelocity::assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
 		assert(false);
-		return Eigen::VectorXd(data.vals.basis_values.size() * size());
+		std::fill(local_gradient.begin(), local_gradient.end(), 0.0);
 	}
 
-	Eigen::MatrixXd
-	NavierStokesVelocity::assemble_hessian(const NonLinearAssemblerData &data) const
+	void NavierStokesVelocity::assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
 		Eigen::MatrixXd H;
 		if (full_gradient_)
@@ -50,30 +50,35 @@ namespace polyfem::assembler
 		else
 			H = compute_N(data);
 
-		return H.transpose();
+		int local_matrix_size = data.basis_num * size();
+		assert(local_hessian.size() == local_matrix_size * local_matrix_size);
+		Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> local_hessian_mat(
+			local_hessian.data(), local_matrix_size, local_matrix_size);
+		local_hessian_mat = H.transpose();
 	}
 
 	// Compute N = int v \cdot \nabla phi_i \cdot \phi_j
 
-	Eigen::MatrixXd NavierStokesVelocity::compute_N(const NonLinearAssemblerData &data) const
+	Eigen::MatrixXd NavierStokesVelocity::compute_N(const NonLinearElementAssemblyData &data) const
 	{
 		typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> GradMat;
 
 		assert(data.x.cols() == 1);
 
-		const int n_pts = data.da.size();
-		const int n_bases = data.vals.basis_values.size();
+		const int n_pts = data.weighted_measure.size();
+		const int n_bases = data.basis_num;
 
 		Eigen::Matrix<double, Eigen::Dynamic, 1> local_vel(n_bases * size(), 1);
 		local_vel.setZero();
-		for (size_t i = 0; i < n_bases; ++i)
+		for (int i = 0; i < n_bases; ++i)
 		{
-			const auto &bs = data.vals.basis_values[i];
-			for (size_t ii = 0; ii < bs.global.size(); ++ii)
+			auto ids = data.global_ids(i);
+			auto weights = data.global_weights(i);
+			for (int ii = 0; ii < ids.size(); ++ii)
 			{
 				for (int d = 0; d < size(); ++d)
 				{
-					local_vel(i * size() + d) += bs.global[ii].val * data.x(bs.global[ii].index * size() + d);
+					local_vel(i * size() + d) += weights[ii] * data.x(ids[ii] * size() + d, 0);
 				}
 			}
 		}
@@ -91,10 +96,9 @@ namespace polyfem::assembler
 		{
 			vel.setZero();
 
-			for (size_t i = 0; i < n_bases; ++i)
+			for (int i = 0; i < n_bases; ++i)
 			{
-				const auto &bs = data.vals.basis_values[i];
-				const double val = bs.val(p);
+				const double val = data.gather_basis_value(i, p);
 
 				for (int d = 0; d < size(); ++d)
 				{
@@ -102,26 +106,26 @@ namespace polyfem::assembler
 				}
 			}
 
-			for (long k = 0; k < jac_it.size(); ++k)
-				jac_it(k) = data.vals.jac_it[p](k);
+			jac_it = data.jacobian_inverse_transpose(p);
 
 			for (int i = 0; i < n_bases; ++i)
 			{
-				const auto &bi = data.vals.basis_values[i];
 				for (int m = 0; m < size(); ++m)
 				{
 					grad_i.setZero();
-					grad_i.row(m) = bi.grad.row(p);
+					if (size() == 2)
+						grad_i.row(m) = data.gather_basis_grad<2>(i, p);
+					else
+						grad_i.row(m) = data.gather_basis_grad<3>(i, p);
 					grad_i = grad_i * jac_it;
 
 					for (int j = 0; j < n_bases; ++j)
 					{
-						const auto &bj = data.vals.basis_values[j];
 						for (int n = 0; n < size(); ++n)
 						{
 							phi_j.setZero();
-							phi_j(n) = bj.val(p);
-							N(i * size() + m, j * size() + n) += (grad_i * vel).dot(phi_j) * data.da(p);
+							phi_j(n) = data.gather_basis_value(j, p);
+							N(i * size() + m, j * size() + n) += (grad_i * vel).dot(phi_j) * data.weighted_measure[p];
 						}
 					}
 				}
@@ -133,25 +137,26 @@ namespace polyfem::assembler
 
 	// Compute N = int phi_j \cdot \nabla v \cdot \phi_j
 
-	Eigen::MatrixXd NavierStokesVelocity::compute_W(const NonLinearAssemblerData &data) const
+	Eigen::MatrixXd NavierStokesVelocity::compute_W(const NonLinearElementAssemblyData &data) const
 	{
 		typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> GradMat;
 
 		assert(data.x.cols() == 1);
 
-		const int n_pts = data.da.size();
-		const int n_bases = data.vals.basis_values.size();
+		const int n_pts = data.weighted_measure.size();
+		const int n_bases = data.basis_num;
 
 		Eigen::Matrix<double, Eigen::Dynamic, 1> local_vel(n_bases * size(), 1);
 		local_vel.setZero();
-		for (size_t i = 0; i < n_bases; ++i)
+		for (int i = 0; i < n_bases; ++i)
 		{
-			const auto &bs = data.vals.basis_values[i];
-			for (size_t ii = 0; ii < bs.global.size(); ++ii)
+			auto ids = data.global_ids(i);
+			auto weights = data.global_weights(i);
+			for (int ii = 0; ii < ids.size(); ++ii)
 			{
 				for (int d = 0; d < size(); ++d)
 				{
-					local_vel(i * size() + d) += bs.global[ii].val * data.x(bs.global[ii].index * size() + d);
+					local_vel(i * size() + d) += weights[ii] * data.x(ids[ii] * size() + d, 0);
 				}
 			}
 		}
@@ -169,10 +174,13 @@ namespace polyfem::assembler
 		{
 			grad_v.setZero();
 
-			for (size_t i = 0; i < n_bases; ++i)
+			for (int i = 0; i < n_bases; ++i)
 			{
-				const auto &bs = data.vals.basis_values[i];
-				const Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 3, 1> grad = bs.grad.row(p);
+				RowVectorNd grad;
+				if (size() == 2)
+					grad = data.gather_basis_grad<2>(i, p);
+				else
+					grad = data.gather_basis_grad<3>(i, p);
 				assert(grad.size() == size());
 
 				for (int d = 0; d < size(); ++d)
@@ -184,26 +192,23 @@ namespace polyfem::assembler
 				}
 			}
 
-			for (long k = 0; k < jac_it.size(); ++k)
-				jac_it(k) = data.vals.jac_it[p](k);
+			jac_it = data.jacobian_inverse_transpose(p);
 			grad_v = (grad_v * jac_it).eval();
 
 			for (int i = 0; i < n_bases; ++i)
 			{
-				const auto &bi = data.vals.basis_values[i];
 				for (int m = 0; m < size(); ++m)
 				{
 					phi_i.setZero();
-					phi_i(m) = bi.val(p);
+					phi_i(m) = data.gather_basis_value(i, p);
 
 					for (int j = 0; j < n_bases; ++j)
 					{
-						const auto &bj = data.vals.basis_values[j];
 						for (int n = 0; n < size(); ++n)
 						{
 							phi_j.setZero();
-							phi_j(n) = bj.val(p);
-							W(i * size() + m, j * size() + n) += (grad_v * phi_i).dot(phi_j) * data.da(p);
+							phi_j(n) = data.gather_basis_value(j, p);
+							W(i * size() + m, j * size() + n) += (grad_v * phi_i).dot(phi_j) * data.weighted_measure[p];
 						}
 					}
 				}

@@ -83,37 +83,31 @@ namespace polyfem::assembler
 		params_.add_multimaterial(index, params, size() == 3, units.stress(), root_path);
 	}
 
-	Eigen::VectorXd
-	FixedCorotational::assemble_gradient(const NonLinearAssemblerData &data) const
+	void FixedCorotational::assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
-		Eigen::Matrix<double, Eigen::Dynamic, 1> gradient;
-
+		assert(local_gradient.size() == data.basis_num * size());
 		if (size() == 2)
 		{
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 3:
 			{
-				gradient.resize(6);
-				compute_energy_aux_gradient_fast<3, 2>(data, gradient);
+				compute_energy_aux_gradient_fast<3, 2>(data, local_gradient);
 				break;
 			}
 			case 6:
 			{
-				gradient.resize(12);
-				compute_energy_aux_gradient_fast<6, 2>(data, gradient);
+				compute_energy_aux_gradient_fast<6, 2>(data, local_gradient);
 				break;
 			}
 			case 10:
 			{
-				gradient.resize(20);
-				compute_energy_aux_gradient_fast<10, 2>(data, gradient);
+				compute_energy_aux_gradient_fast<10, 2>(data, local_gradient);
 				break;
 			}
 			default:
 			{
-				gradient.resize(data.vals.basis_values.size() * 2);
-				compute_energy_aux_gradient_fast<Eigen::Dynamic, 2>(data, gradient);
+				compute_energy_aux_gradient_fast<Eigen::Dynamic, 2>(data, local_gradient);
 				break;
 			}
 			}
@@ -121,73 +115,60 @@ namespace polyfem::assembler
 		else // if (size() == 3)
 		{
 			assert(size() == 3);
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 4:
 			{
-				gradient.resize(12);
-				compute_energy_aux_gradient_fast<4, 3>(data, gradient);
+				compute_energy_aux_gradient_fast<4, 3>(data, local_gradient);
 				break;
 			}
 			case 10:
 			{
-				gradient.resize(30);
-				compute_energy_aux_gradient_fast<10, 3>(data, gradient);
+				compute_energy_aux_gradient_fast<10, 3>(data, local_gradient);
 				break;
 			}
 			case 20:
 			{
-				gradient.resize(60);
-				compute_energy_aux_gradient_fast<20, 3>(data, gradient);
+				compute_energy_aux_gradient_fast<20, 3>(data, local_gradient);
 				break;
 			}
 			default:
 			{
-				gradient.resize(data.vals.basis_values.size() * 3);
-				compute_energy_aux_gradient_fast<Eigen::Dynamic, 3>(data, gradient);
+				compute_energy_aux_gradient_fast<Eigen::Dynamic, 3>(data, local_gradient);
 				break;
 			}
 			}
 		}
-
-		return gradient;
 	}
 
-	Eigen::MatrixXd
-	FixedCorotational::assemble_hessian(const NonLinearAssemblerData &data) const
+	void FixedCorotational::assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
-		Eigen::MatrixXd hessian;
+		int local_matrix_size = data.basis_num * size();
+		assert(local_hessian.size() == local_matrix_size * local_matrix_size);
+		std::fill(local_hessian.begin(), local_hessian.end(), 0.0);
 
 		if (size() == 2)
 		{
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 3:
 			{
-				hessian.resize(6, 6);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<3, 2>(data, hessian);
+				compute_energy_hessian_aux_fast<3, 2>(data, local_hessian);
 				break;
 			}
 			case 6:
 			{
-				hessian.resize(12, 12);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<6, 2>(data, hessian);
+				compute_energy_hessian_aux_fast<6, 2>(data, local_hessian);
 				break;
 			}
 			case 10:
 			{
-				hessian.resize(20, 20);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<10, 2>(data, hessian);
+				compute_energy_hessian_aux_fast<10, 2>(data, local_hessian);
 				break;
 			}
 			default:
 			{
-				hessian.resize(data.vals.basis_values.size() * 2, data.vals.basis_values.size() * 2);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<Eigen::Dynamic, 2>(data, hessian);
+				compute_energy_hessian_aux_fast<Eigen::Dynamic, 2>(data, local_hessian);
 				break;
 			}
 			}
@@ -195,40 +176,30 @@ namespace polyfem::assembler
 		else // if (size() == 3)
 		{
 			assert(size() == 3);
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 4:
 			{
-				hessian.resize(12, 12);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<4, 3>(data, hessian);
+				compute_energy_hessian_aux_fast<4, 3>(data, local_hessian);
 				break;
 			}
 			case 10:
 			{
-				hessian.resize(30, 30);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<10, 3>(data, hessian);
+				compute_energy_hessian_aux_fast<10, 3>(data, local_hessian);
 				break;
 			}
 			case 20:
 			{
-				hessian.resize(60, 60);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<20, 3>(data, hessian);
+				compute_energy_hessian_aux_fast<20, 3>(data, local_hessian);
 				break;
 			}
 			default:
 			{
-				hessian.resize(data.vals.basis_values.size() * 3, data.vals.basis_values.size() * 3);
-				hessian.setZero();
-				compute_energy_hessian_aux_fast<Eigen::Dynamic, 3>(data, hessian);
+				compute_energy_hessian_aux_fast<Eigen::Dynamic, 3>(data, local_hessian);
 				break;
 			}
 			}
 		}
-
-		return hessian;
 	}
 
 	void FixedCorotational::assign_stress_tensor(const OutputData &data,
@@ -282,7 +253,7 @@ namespace polyfem::assembler
 		}
 	}
 
-	double FixedCorotational::compute_energy(const NonLinearAssemblerData &data) const
+	double FixedCorotational::compute_energy(const NonLinearElementAssemblyData &data) const
 	{
 		if (size() == 2)
 			return compute_energy_aux<2>(data);
@@ -291,7 +262,7 @@ namespace polyfem::assembler
 	}
 
 	template <int dim>
-	double FixedCorotational::compute_energy_aux(const NonLinearAssemblerData &data) const
+	double FixedCorotational::compute_energy_aux(const NonLinearElementAssemblyData &data) const
 	{
 		Eigen::VectorXd local_disp;
 		get_local_disp(data, dim, local_disp);
@@ -300,7 +271,7 @@ namespace polyfem::assembler
 
 		double energy = 0.0;
 
-		const int n_pts = data.da.size();
+		const int n_pts = data.weighted_measure.size();
 		for (long p = 0; p < n_pts; ++p)
 		{
 			compute_disp_grad_at_quad(data, local_disp, p, dim, def_grad);
@@ -309,64 +280,50 @@ namespace polyfem::assembler
 			def_grad.diagonal().array() += 1.0;
 
 			double lambda, mu;
-			params_.lambda_mu(data.vals.quadrature.points.row(p), data.vals.val.row(p), data.t, data.vals.element_id, lambda, mu);
+			params_.lambda_mu(data.quadrature_point(p), data.physical_position(p), data.t, data.element_id, lambda, mu);
 
 			const double val = compute_energy_from_def_grad(def_grad, lambda, mu);
 
-			energy += val * data.da(p);
+			energy += val * data.weighted_measure[p];
 		}
 		return energy;
 	}
 
 	template <int n_basis, int dim>
-	void FixedCorotational::compute_energy_aux_gradient_fast(const NonLinearAssemblerData &data, Eigen::Matrix<double, Eigen::Dynamic, 1> &G_flattened) const
+	void FixedCorotational::compute_energy_aux_gradient_fast(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
 		assert(data.x.cols() == 1);
+		Eigen::Map<Eigen::VectorXd> G_flattened(local_gradient.data(), local_gradient.size());
 
-		const int n_pts = data.da.size();
+		const int n_pts = data.weighted_measure.size();
 
-		Eigen::Matrix<double, n_basis, dim> local_disp(data.vals.basis_values.size(), size());
-		local_disp.setZero();
-		for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-		{
-			const auto &bs = data.vals.basis_values[i];
-			for (size_t ii = 0; ii < bs.global.size(); ++ii)
-			{
-				for (int d = 0; d < size(); ++d)
-				{
-					local_disp(i, d) += bs.global[ii].val * data.x(bs.global[ii].index * size() + d);
-				}
-			}
-		}
+		Eigen::Matrix<double, n_basis, dim> local_disp(data.basis_num, size());
+		data.gather_unknowns<dim>(local_disp);
 
 		Eigen::Matrix<double, dim, dim> def_grad(size(), size());
 
-		Eigen::Matrix<double, n_basis, dim> G(data.vals.basis_values.size(), size());
+		Eigen::Matrix<double, n_basis, dim> G(data.basis_num, size());
 		G.setZero();
 
 		for (long p = 0; p < n_pts; ++p)
 		{
-			Eigen::Matrix<double, n_basis, dim> grad(data.vals.basis_values.size(), size());
+			Eigen::Matrix<double, n_basis, dim> grad(data.basis_num, size());
+			data.gather_basis_grads<dim>(p, grad);
 
-			for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-			{
-				grad.row(i) = data.vals.basis_values[i].grad.row(p);
-			}
-
-			const Eigen::Matrix<double, dim, dim> jac_it = data.vals.jac_it[p];
+			const Eigen::Matrix<double, dim, dim> jac_it = data.gather_J_inverse_transpose<dim>(p);
 			const Eigen::Matrix<double, n_basis, dim> delF_delU = grad * jac_it;
 
 			// Id + grad d
 			def_grad = local_disp.transpose() * delF_delU + Eigen::Matrix<double, dim, dim>::Identity(size(), size());
 
 			double lambda, mu;
-			params_.lambda_mu(data.vals.quadrature.points.row(p), data.vals.val.row(p), data.t, data.vals.element_id, lambda, mu);
+			params_.lambda_mu(data.quadrature_point(p), data.physical_position(p), data.t, data.element_id, lambda, mu);
 
 			Eigen::Matrix<double, dim, dim> gradient_temp = compute_stress_from_def_grad(def_grad, lambda, mu);
 
 			Eigen::Matrix<double, n_basis, dim> gradient = delF_delU * gradient_temp.transpose();
 
-			G.noalias() += gradient * data.da(p);
+			G.noalias() += gradient * data.weighted_measure[p];
 		}
 
 		Eigen::Matrix<double, dim, n_basis> G_T = G.transpose();
@@ -377,46 +334,32 @@ namespace polyfem::assembler
 	}
 
 	template <int n_basis, int dim>
-	void FixedCorotational::compute_energy_hessian_aux_fast(const NonLinearAssemblerData &data, Eigen::MatrixXd &H) const
+	void FixedCorotational::compute_energy_hessian_aux_fast(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
 		assert(data.x.cols() == 1);
 
 		constexpr int N = (n_basis == Eigen::Dynamic) ? Eigen::Dynamic : n_basis * dim;
-		const int n_pts = data.da.size();
+		Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> H(local_hessian.data(), data.basis_num * dim, data.basis_num * dim);
+		const int n_pts = data.weighted_measure.size();
 
-		Eigen::Matrix<double, n_basis, dim> local_disp(data.vals.basis_values.size(), size());
-		local_disp.setZero();
-		for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-		{
-			const auto &bs = data.vals.basis_values[i];
-			for (size_t ii = 0; ii < bs.global.size(); ++ii)
-			{
-				for (int d = 0; d < size(); ++d)
-				{
-					local_disp(i, d) += bs.global[ii].val * data.x(bs.global[ii].index * size() + d);
-				}
-			}
-		}
+		Eigen::Matrix<double, n_basis, dim> local_disp(data.basis_num, size());
+		data.gather_unknowns<dim>(local_disp);
 
 		Eigen::Matrix<double, dim, dim> def_grad(size(), size());
 
 		for (long p = 0; p < n_pts; ++p)
 		{
-			Eigen::Matrix<double, n_basis, dim> grad(data.vals.basis_values.size(), size());
+			Eigen::Matrix<double, n_basis, dim> grad(data.basis_num, size());
+			data.gather_basis_grads<dim>(p, grad);
 
-			for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-			{
-				grad.row(i) = data.vals.basis_values[i].grad.row(p);
-			}
-
-			Eigen::Matrix<double, dim, dim> jac_it = data.vals.jac_it[p];
+			Eigen::Matrix<double, dim, dim> jac_it = data.gather_J_inverse_transpose<dim>(p);
 			const Eigen::Matrix<double, n_basis, dim> delF_delU = grad * jac_it;
 
 			// Id + grad d
 			def_grad = local_disp.transpose() * delF_delU + Eigen::Matrix<double, dim, dim>::Identity(size(), size());
 
 			double lambda, mu;
-			params_.lambda_mu(data.vals.quadrature.points.row(p), data.vals.val.row(p), data.t, data.vals.element_id, lambda, mu);
+			params_.lambda_mu(data.quadrature_point(p), data.physical_position(p), data.t, data.element_id, lambda, mu);
 
 			Eigen::Matrix<double, dim * dim, dim * dim> hessian_temp = compute_stiffness_from_def_grad(def_grad, lambda, mu);
 
@@ -431,7 +374,7 @@ namespace polyfem::assembler
 
 			Eigen::Matrix<double, N, N> hessian = delF_delU_tensor.transpose() * hessian_temp * delF_delU_tensor;
 
-			H += hessian * data.da(p);
+			H += hessian * data.weighted_measure[p];
 		}
 	}
 

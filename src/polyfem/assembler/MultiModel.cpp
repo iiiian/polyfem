@@ -31,27 +31,25 @@ namespace polyfem::assembler
 		return res;
 	}
 
-	Eigen::VectorXd
-	MultiModel::assemble_gradient(const NonLinearAssemblerData &data) const
+	void MultiModel::assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
-		const int el_id = data.vals.element_id;
+		const int el_id = data.element_id;
 		const std::string model = multi_material_models_[el_id];
 		const auto assembler = all_elastic_materials_.get_assembler(model);
-		return assembler->assemble_gradient(data);
+		assembler->assemble_gradient(data, local_gradient);
 	}
 
-	Eigen::MatrixXd
-	MultiModel::assemble_hessian(const NonLinearAssemblerData &data) const
+	void MultiModel::assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
-		const int el_id = data.vals.element_id;
+		const int el_id = data.element_id;
 		const std::string model = multi_material_models_[el_id];
 		const auto assembler = all_elastic_materials_.get_assembler(model);
-		return assembler->assemble_hessian(data);
+		assembler->assemble_hessian(data, local_hessian);
 	}
 
-	double MultiModel::compute_energy(const NonLinearAssemblerData &data) const
+	double MultiModel::compute_energy(const NonLinearElementAssemblyData &data) const
 	{
-		const int el_id = data.vals.element_id;
+		const int el_id = data.element_id;
 		const std::string model = multi_material_models_[el_id];
 		const auto assembler = all_elastic_materials_.get_assembler(model);
 		return assembler->compute_energy(data);

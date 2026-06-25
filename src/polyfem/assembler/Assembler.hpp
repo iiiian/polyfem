@@ -74,54 +74,17 @@ namespace polyfem::assembler
 			double time,
 			AssemblyResult &result) const { log_and_throw_error("Assembler not implemented by {}!", name()); }
 
-		// assemble energy
-		virtual double assemble_energy(
-			const bool is_volume,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
-			const Eigen::MatrixXd &displacement,
-			const Eigen::MatrixXd &displacement_prev) const { log_and_throw_error("Assemble energy not implemented by {}!", name()); }
-
-		virtual Eigen::VectorXd assemble_energy_per_element(
-			const bool is_volume,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
-			const Eigen::MatrixXd &displacement,
-			const Eigen::MatrixXd &displacement_prev) const { log_and_throw_error("Assemble energy not implemented by {}!", name()); }
-
-		// assemble gradient of energy (rhs)
-		virtual void assemble_gradient(
-			const bool is_volume,
-			const int n_basis,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
-			const Eigen::MatrixXd &displacement,
-			const Eigen::MatrixXd &displacement_prev,
-			Eigen::MatrixXd &rhs) const { log_and_throw_error("Assemble grad not implemented by {}!", name()); }
-
-		// assemble hessian of energy (grad)
 		virtual void assemble_hessian(
-			const bool is_volume,
-			const int n_basis,
-			const bool project_to_psd,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
+			int global_dof_num,
+			bool project_to_psd,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			double dt,
 			const Eigen::MatrixXd &displacement,
 			const Eigen::MatrixXd &displacement_prev,
-			utils::MatrixCache &mat_cache,
-			StiffnessMatrix &grad) const { log_and_throw_error("Assemble hessian not implemented by {}!", name()); }
+			AssemblyResult &result) const { log_and_throw_error("Assemble hessian not implemented by {}!", name()); }
 
 		// plotting (eg von mises), assembler is the name of the formulation
 		virtual void compute_scalar_value(
@@ -231,62 +194,53 @@ namespace polyfem::assembler
 	public:
 		virtual ~NLAssembler() = default;
 
-		// assemble energy
 		double assemble_energy(
-			const bool is_volume,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			double dt,
 			const Eigen::MatrixXd &displacement,
-			const Eigen::MatrixXd &displacement_prev) const override;
+			const Eigen::MatrixXd &displacement_prev) const;
 
-		// assemble the energy per element
 		Eigen::VectorXd assemble_energy_per_element(
-			const bool is_volume,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			double dt,
 			const Eigen::MatrixXd &displacement,
-			const Eigen::MatrixXd &displacement_prev) const override;
+			const Eigen::MatrixXd &displacement_prev) const;
 
-		// assemble gradient of energy (rhs)
 		void assemble_gradient(
-			const bool is_volume,
-			const int n_basis,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
+			int global_dof_num,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			double dt,
 			const Eigen::MatrixXd &displacement,
 			const Eigen::MatrixXd &displacement_prev,
-			Eigen::MatrixXd &rhs) const override;
+			Eigen::MatrixXd &rhs) const;
 
-		// assemble hessian of energy (grad)
 		void assemble_hessian(
-			const bool is_volume,
-			const int n_basis,
-			const bool project_to_psd,
-			const std::vector<basis::ElementBases> &bases,
-			const std::vector<basis::ElementBases> &gbases,
-			const AssemblyValsCache &cache,
-			const double t,
-			const double dt,
+			int global_dof_num,
+			bool project_to_psd,
+			const basis::ng::ElementBasesView &solution_bases,
+			const basis::ng::ElementBasesView &geom_bases,
+			const AssemblyCacheView &assembly_cache,
+			double time,
+			double dt,
 			const Eigen::MatrixXd &displacement,
 			const Eigen::MatrixXd &displacement_prev,
-			utils::MatrixCache &mat_cache,
-			StiffnessMatrix &grad) const override;
+			AssemblyResult &result) const override;
 
 		virtual bool is_linear() const override { return false; }
 
 		// energy, gradient, and hessian used in newton method
-		virtual double compute_energy(const NonLinearAssemblerData &data) const = 0;
-		virtual Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const = 0;
-		virtual Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const = 0;
+		virtual double compute_energy(const NonLinearElementAssemblyData &data) const = 0;
+		virtual void assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const = 0;
+		virtual void assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const = 0;
 	};
 
 	class ElasticityAssembler : virtual public Assembler

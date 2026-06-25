@@ -147,22 +147,22 @@ namespace polyfem::assembler
 			weighted_measure};
 	}
 
-	void AssemblyCache::reset()
+	void AssemblyCache::clear()
 	{
-		desc.resize(0);
-		basis_values.resize(0);
-		basis_grad_x.resize(0);
-		basis_grad_y.resize(0);
-		basis_grad_z.resize(0);
-		basis_grad_phy_x.resize(0);
-		basis_grad_phy_y.resize(0);
-		basis_grad_phy_z.resize(0);
-		physical_x.resize(0);
-		physical_y.resize(0);
-		physical_z.resize(0);
-		det_J.resize(0);
-		J_inverse_transpose.resize(0);
-		weighted_measure.resize(0);
+		desc.clear();
+		basis_values.clear();
+		basis_grad_x.clear();
+		basis_grad_y.clear();
+		basis_grad_z.clear();
+		basis_grad_phy_x.clear();
+		basis_grad_phy_y.clear();
+		basis_grad_phy_z.clear();
+		physical_x.clear();
+		physical_y.clear();
+		physical_z.clear();
+		det_J.clear();
+		J_inverse_transpose.clear();
+		weighted_measure.clear();
 	};
 
 	void compute_assembly_cache_single(
@@ -342,7 +342,7 @@ namespace polyfem::assembler
 		for (int e = 0; e < bases.element_desc.size(); ++e)
 		{
 			// TODO: smart caching
-			// - For low order basis, dont cache.
+			// - For low order basis, dont cache?
 			// - Based on user json flag and element size.
 
 			compute_assembly_cache_single(

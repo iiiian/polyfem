@@ -18,9 +18,9 @@ namespace polyfem::assembler
 		using ElasticityNLAssembler::assemble_hessian;
 
 		// energy, gradient, and hessian used in newton method
-		double compute_energy(const NonLinearAssemblerData &data) const override;
-		Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const override;
-		Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const override;
+		double compute_energy(const NonLinearElementAssemblyData &data) const override;
+		void assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const override;
+		void assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const override;
 
 		void compute_stress_grad_multiply_mat(const OptAssemblerData &data,
 											  const Eigen::MatrixXd &mat,
@@ -62,11 +62,11 @@ namespace polyfem::assembler
 
 		// utility function that computes energy, the template is used for double, DScalar1, and DScalar2 in energy, gradient and hessian
 		template <int dim>
-		double compute_energy_aux(const NonLinearAssemblerData &data) const;
+		double compute_energy_aux(const NonLinearElementAssemblyData &data) const;
 		template <int n_basis, int dim>
-		void compute_energy_hessian_aux_fast(const NonLinearAssemblerData &data, Eigen::MatrixXd &H) const;
+		void compute_energy_hessian_aux_fast(const NonLinearElementAssemblyData &data, span<double> local_hessian) const;
 		template <int n_basis, int dim>
-		void compute_energy_aux_gradient_fast(const NonLinearAssemblerData &data, Eigen::VectorXd &G_flattened) const;
+		void compute_energy_aux_gradient_fast(const NonLinearElementAssemblyData &data, span<double> local_gradient) const;
 
 		template <int dim>
 		static double compute_energy_from_singular_values(const Eigen::Vector<double, dim> &sigmas, const double lambda, const double mu);

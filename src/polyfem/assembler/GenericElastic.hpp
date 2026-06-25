@@ -30,9 +30,9 @@ namespace polyfem::assembler
 		virtual ~GenericElastic() = default;
 
 		// energy, gradient, and hessian used in newton method
-		double compute_energy(const NonLinearAssemblerData &data) const override;
-		Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const override;
-		Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const override;
+		double compute_energy(const NonLinearElementAssemblyData &data) const override;
+		void assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const override;
+		void assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const override;
 
 		void assign_stress_tensor(const OutputData &data,
 								  const int all_size,
@@ -90,7 +90,7 @@ namespace polyfem::assembler
 	private:
 		// utility function that computes energy, the template is used for double, DScalar1, and DScalar2 in energy, gradient and hessian
 		template <typename T>
-		T compute_energy_aux(const NonLinearAssemblerData &data) const
+		T compute_energy_aux(const NonLinearElementAssemblyData &data) const
 		{
 			typedef Eigen::Matrix<T, Eigen::Dynamic, 1> AutoDiffVect;
 			typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> AutoDiffGradMat;
@@ -103,7 +103,7 @@ namespace polyfem::assembler
 
 			T energy = T(0.0);
 
-			const int n_pts = data.da.size();
+			const int n_pts = data.weighted_measure.size();
 			for (long p = 0; p < n_pts; ++p)
 			{
 				compute_disp_grad_at_quad(data, local_disp, p, size(), def_grad);
@@ -114,7 +114,7 @@ namespace polyfem::assembler
 
 				if (!derived().real_def_grad())
 				{
-					DoubleGradMat tmp_jac_it = data.vals.jac_it[p];
+					DoubleGradMat tmp_jac_it = data.jacobian_inverse_transpose(p);
 					tmp_jac_it = tmp_jac_it.inverse();
 
 					AutoDiffGradMat jac_it(size(), size());
@@ -124,60 +124,47 @@ namespace polyfem::assembler
 					def_grad *= jac_it;
 				}
 
-				const T val = derived().elastic_energy(data.vals.val.row(p), data.t, data.vals.element_id, def_grad);
+				const T val = derived().elastic_energy(data.physical_position(p), data.t, data.element_id, def_grad);
 
-				energy += val * data.da(p);
+				energy += val * data.weighted_measure[p];
 			}
 			return energy;
 		}
 
-		Eigen::MatrixXd assemble_hessian_full_ad(const NonLinearAssemblerData &data) const;
-		Eigen::VectorXd assemble_gradient_full_ad(const NonLinearAssemblerData &data) const;
+		void assemble_hessian_full_ad(const NonLinearElementAssemblyData &data, span<double> local_hessian) const;
+		void assemble_gradient_full_ad(const NonLinearElementAssemblyData &data, span<double> local_gradient) const;
 
-		Eigen::MatrixXd assemble_hessian_stress_ad(const NonLinearAssemblerData &data) const;
-		Eigen::VectorXd assemble_gradient_stress_ad(const NonLinearAssemblerData &data) const;
+		void assemble_hessian_stress_ad(const NonLinearElementAssemblyData &data, span<double> local_hessian) const;
+		void assemble_gradient_stress_ad(const NonLinearElementAssemblyData &data, span<double> local_gradient) const;
 
-		Eigen::MatrixXd assemble_hessian_stress_noad(const NonLinearAssemblerData &data) const;
-		Eigen::VectorXd assemble_gradient_stress_noad(const NonLinearAssemblerData &data) const;
+		void assemble_hessian_stress_noad(const NonLinearElementAssemblyData &data, span<double> local_hessian) const;
+		void assemble_gradient_stress_noad(const NonLinearElementAssemblyData &data, span<double> local_gradient) const;
 
 		template <int n_basis, int dim>
-		void compute_gradient_from_stress(const NonLinearAssemblerData &data, Eigen::VectorXd &res) const
+		void compute_gradient_from_stress(const NonLinearElementAssemblyData &data, Eigen::VectorXd &res) const
 		{
 			typedef DScalar1<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>> Diff;
 			typedef Eigen::Matrix<Diff, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> AutoDiffGradMat;
 			typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> DoubleGradMat;
 
-			const int n_pts = data.da.size();
+			const int n_pts = data.weighted_measure.size();
 
-			Eigen::Matrix<double, n_basis, dim> local_disp(data.vals.basis_values.size(), size());
-			local_disp.setZero();
-			for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-			{
-				const auto &bs = data.vals.basis_values[i];
-				for (size_t ii = 0; ii < bs.global.size(); ++ii)
-				{
-					for (int d = 0; d < dim; ++d)
-					{
-						local_disp(i, d) += bs.global[ii].val * data.x(bs.global[ii].index * size() + d);
-					}
-				}
-			}
+			Eigen::Matrix<double, n_basis, dim> local_disp(data.basis_num, size());
+			data.gather_unknowns<dim>(local_disp);
 
 			Eigen::Matrix<double, dim, dim> def_grad(size(), size());
 			DiffScalarBase::setVariableCount(size() * size());
 			AutoDiffGradMat def_grad_ad(size(), size());
 
-			res.resize(data.vals.basis_values.size() * size());
+			res.resize(data.basis_num * size());
 			res.setZero();
 
 			for (long p = 0; p < n_pts; ++p)
 			{
-				Eigen::Matrix<double, n_basis, dim> grad(data.vals.basis_values.size(), size());
+				Eigen::Matrix<double, n_basis, dim> grad(data.basis_num, size());
+				data.gather_basis_grads<dim>(p, grad);
 
-				for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-					grad.row(i) = data.vals.basis_values[i].grad.row(p);
-
-				Eigen::Matrix<double, dim, dim> jac_it = data.vals.jac_it[p];
+				Eigen::Matrix<double, dim, dim> jac_it = data.gather_J_inverse_transpose<dim>(p);
 				Eigen::Matrix<double, n_basis, dim> G = grad * jac_it;
 				def_grad = local_disp.transpose() * G + Eigen::Matrix<double, dim, dim>::Identity(size(), size());
 
@@ -187,7 +174,7 @@ namespace polyfem::assembler
 
 				if (!derived().real_def_grad())
 				{
-					DoubleGradMat tmp_jac_it = data.vals.jac_it[p];
+					DoubleGradMat tmp_jac_it = data.gather_J_inverse_transpose<dim>(p);
 					tmp_jac_it = tmp_jac_it.inverse();
 
 					AutoDiffGradMat jac_it(size(), size());
@@ -197,97 +184,75 @@ namespace polyfem::assembler
 					def_grad_ad *= jac_it;
 				}
 
-				const Diff val = derived().elastic_energy(data.vals.val.row(p), data.t, data.vals.element_id, def_grad_ad);
+				const Diff val = derived().elastic_energy(data.physical_position(p), data.t, data.element_id, def_grad_ad);
 
 				Eigen::Matrix<double, dim, dim> P;
 				for (int i = 0; i < size(); ++i)
 					for (int j = 0; j < size(); ++j)
 						P(i, j) = val.getGradient()(i * size() + j);
 
-				const Eigen::Matrix<double, n_basis, dim> Rloc = G * P.transpose() * data.da(p);
+				const Eigen::Matrix<double, n_basis, dim> Rloc = G * P.transpose() * data.weighted_measure[p];
 
-				for (int a = 0; a < data.vals.basis_values.size(); ++a)
+				for (int a = 0; a < data.basis_num; ++a)
 					for (int d = 0; d < size(); ++d)
 						res(a * size() + d) += Rloc(a, d);
 			}
 		}
 
 		template <int n_basis, int dim>
-		void compute_gradient_from_stress_noad(const NonLinearAssemblerData &data, Eigen::VectorXd &res) const
+		void compute_gradient_from_stress_noad(const NonLinearElementAssemblyData &data, Eigen::VectorXd &res) const
 		{
 			typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> DoubleGradMat;
 
-			const int n_pts = data.da.size();
+			const int n_pts = data.weighted_measure.size();
 
-			Eigen::Matrix<double, n_basis, dim> local_disp(data.vals.basis_values.size(), size());
-			local_disp.setZero();
-			for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-			{
-				const auto &bs = data.vals.basis_values[i];
-				for (size_t ii = 0; ii < bs.global.size(); ++ii)
-				{
-					for (int d = 0; d < dim; ++d)
-					{
-						local_disp(i, d) += bs.global[ii].val * data.x(bs.global[ii].index * size() + d);
-					}
-				}
-			}
+			Eigen::Matrix<double, n_basis, dim> local_disp(data.basis_num, size());
+			data.gather_unknowns<dim>(local_disp);
 
 			Eigen::Matrix<double, dim, dim> def_grad(size(), size());
-			res.resize(data.vals.basis_values.size() * size());
+			res.resize(data.basis_num * size());
 			res.setZero();
 
 			for (long p = 0; p < n_pts; ++p)
 			{
-				Eigen::Matrix<double, n_basis, dim> grad(data.vals.basis_values.size(), size());
+				Eigen::Matrix<double, n_basis, dim> grad(data.basis_num, size());
+				data.gather_basis_grads<dim>(p, grad);
 
-				for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-					grad.row(i) = data.vals.basis_values[i].grad.row(p);
-
-				Eigen::Matrix<double, dim, dim> jac_it = data.vals.jac_it[p];
+				Eigen::Matrix<double, dim, dim> jac_it = data.gather_J_inverse_transpose<dim>(p);
 				Eigen::Matrix<double, n_basis, dim> G = grad * jac_it;
 				def_grad = local_disp.transpose() * G + Eigen::Matrix<double, dim, dim>::Identity(size(), size());
 
 				if (!derived().real_def_grad())
 				{
-					DoubleGradMat jac_it = data.vals.jac_it[p];
+					DoubleGradMat jac_it = data.gather_J_inverse_transpose<dim>(p);
 					jac_it = jac_it.inverse();
 
 					def_grad *= jac_it;
 				}
 
-				const Eigen::Matrix<double, dim, dim> P = derived().gradient(data.vals.val.row(p), data.t, data.vals.element_id, def_grad);
+				const Eigen::Matrix<double, dim, dim> P = derived().gradient(data.physical_position(p), data.t, data.element_id, def_grad);
 				const Eigen::Matrix<double, n_basis, dim> Bgrad = derived().real_def_grad() ? G : grad;
-				const Eigen::Matrix<double, n_basis, dim> Rloc = Bgrad * P.transpose() * data.da(p);
+				const Eigen::Matrix<double, n_basis, dim> Rloc = Bgrad * P.transpose() * data.weighted_measure[p];
 
-				for (int a = 0; a < data.vals.basis_values.size(); ++a)
+				for (int a = 0; a < data.basis_num; ++a)
 					for (int d = 0; d < size(); ++d)
 						res(a * size() + d) += Rloc(a, d);
 			}
 		}
 
 		template <int n_basis, int dim>
-		void compute_hessian_from_stress(const NonLinearAssemblerData &data, Eigen::MatrixXd &H) const
+		void compute_hessian_from_stress(const NonLinearElementAssemblyData &data, Eigen::MatrixXd &H) const
 		{
 			typedef DScalar2<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1>, Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 9, 9>> Diff2;
 			typedef Eigen::Matrix<Diff2, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> AutoDiffGradMat;
 			typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> DoubleGradMat;
 
 			const int d = size();
-			const int nb = data.vals.basis_values.size();
-			const int n_pts = data.da.size();
+			const int nb = data.basis_num;
+			const int n_pts = data.weighted_measure.size();
 
 			Eigen::Matrix<double, n_basis, dim> local_disp(nb, d);
-			local_disp.setZero();
-			for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-			{
-				const auto &bs = data.vals.basis_values[i];
-				for (size_t ii = 0; ii < bs.global.size(); ++ii)
-				{
-					for (int dd = 0; dd < d; ++dd)
-						local_disp(i, dd) += bs.global[ii].val * data.x(bs.global[ii].index * d + dd);
-				}
-			}
+			data.gather_unknowns<dim>(local_disp);
 
 			DiffScalarBase::setVariableCount(d * d);
 			AutoDiffGradMat def_grad_ad(d, d);
@@ -299,10 +264,9 @@ namespace polyfem::assembler
 			for (long p = 0; p < n_pts; ++p)
 			{
 				Eigen::Matrix<double, n_basis, dim> grad_ref(nb, d);
-				for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-					grad_ref.row(i) = data.vals.basis_values[i].grad.row(p);
+				data.gather_basis_grads<dim>(p, grad_ref);
 
-				const Eigen::Matrix<double, dim, dim> jac_it = data.vals.jac_it[p];
+				const Eigen::Matrix<double, dim, dim> jac_it = data.gather_J_inverse_transpose<dim>(p);
 				const Eigen::Matrix<double, n_basis, dim> G = grad_ref * jac_it;
 
 				def_grad = local_disp.transpose() * G + Eigen::Matrix<double, dim, dim>::Identity();
@@ -313,7 +277,7 @@ namespace polyfem::assembler
 
 				if (!derived().real_def_grad())
 				{
-					DoubleGradMat tmp_jac_it = data.vals.jac_it[p];
+					DoubleGradMat tmp_jac_it = data.gather_J_inverse_transpose<dim>(p);
 					tmp_jac_it = tmp_jac_it.inverse();
 
 					AutoDiffGradMat jac_it(size(), size());
@@ -323,7 +287,7 @@ namespace polyfem::assembler
 					def_grad_ad *= jac_it;
 				}
 
-				const Diff2 val = derived().elastic_energy(data.vals.val.row(p), data.t, data.vals.element_id, def_grad_ad);
+				const Diff2 val = derived().elastic_energy(data.physical_position(p), data.t, data.element_id, def_grad_ad);
 
 				Eigen::Matrix<double, dim * dim, dim * dim> A(d * d, d * d);
 				A.setZero();
@@ -343,7 +307,7 @@ namespace polyfem::assembler
 						const Eigen::Matrix<double, dim * dim, dim> Bb = compute_B_block<dim>(G.row(b));
 
 						const Eigen::Matrix<double, dim, dim> Kab =
-							Ba.transpose() * A * Bb * data.da(p);
+							Ba.transpose() * A * Bb * data.weighted_measure[p];
 
 						H.template block<dim, dim>(a * d, b * d) += Kab;
 					}
@@ -352,25 +316,16 @@ namespace polyfem::assembler
 		}
 
 		template <int n_basis, int dim>
-		void compute_hessian_from_stress_noad(const NonLinearAssemblerData &data, Eigen::MatrixXd &H) const
+		void compute_hessian_from_stress_noad(const NonLinearElementAssemblyData &data, Eigen::MatrixXd &H) const
 		{
 			typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, 3, 3> DoubleGradMat;
 
 			const int d = size();
-			const int nb = data.vals.basis_values.size();
-			const int n_pts = data.da.size();
+			const int nb = data.basis_num;
+			const int n_pts = data.weighted_measure.size();
 
 			Eigen::Matrix<double, n_basis, dim> local_disp(nb, d);
-			local_disp.setZero();
-			for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-			{
-				const auto &bs = data.vals.basis_values[i];
-				for (size_t ii = 0; ii < bs.global.size(); ++ii)
-				{
-					for (int dd = 0; dd < d; ++dd)
-						local_disp(i, dd) += bs.global[ii].val * data.x(bs.global[ii].index * d + dd);
-				}
-			}
+			data.gather_unknowns<dim>(local_disp);
 
 			Eigen::Matrix<double, dim, dim> def_grad(d, d);
 
@@ -380,17 +335,16 @@ namespace polyfem::assembler
 			for (long p = 0; p < n_pts; ++p)
 			{
 				Eigen::Matrix<double, n_basis, dim> grad_ref(nb, d);
-				for (size_t i = 0; i < data.vals.basis_values.size(); ++i)
-					grad_ref.row(i) = data.vals.basis_values[i].grad.row(p);
+				data.gather_basis_grads<dim>(p, grad_ref);
 
-				const Eigen::Matrix<double, dim, dim> jac_it = data.vals.jac_it[p];
+				const Eigen::Matrix<double, dim, dim> jac_it = data.gather_J_inverse_transpose<dim>(p);
 				const Eigen::Matrix<double, n_basis, dim> G = grad_ref * jac_it;
 
 				def_grad = local_disp.transpose() * G + Eigen::Matrix<double, dim, dim>::Identity();
 
 				if (!derived().real_def_grad())
 				{
-					DoubleGradMat jac_it = data.vals.jac_it[p];
+					DoubleGradMat jac_it = data.gather_J_inverse_transpose<dim>(p);
 					jac_it = jac_it.inverse();
 
 					def_grad *= jac_it;
@@ -398,7 +352,7 @@ namespace polyfem::assembler
 
 				// Material tangent A = d vec(P) / d vec(F)
 				// Since P = dW/dF, A is just the Hessian of W wrt vec(F).
-				Eigen::Matrix<double, dim * dim, dim * dim> A = derived().hessian(data.vals.val.row(p), data.t, data.vals.element_id, def_grad);
+				Eigen::Matrix<double, dim * dim, dim * dim> A = derived().hessian(data.physical_position(p), data.t, data.element_id, def_grad);
 
 				const Eigen::Matrix<double, n_basis, dim> Bgrad = derived().real_def_grad() ? G : grad_ref;
 
@@ -411,7 +365,7 @@ namespace polyfem::assembler
 						const Eigen::Matrix<double, dim * dim, dim> Bb = compute_B_block<dim>(Bgrad.row(b));
 
 						const Eigen::Matrix<double, dim, dim> Kab =
-							Ba.transpose() * A * Bb * data.da(p);
+							Ba.transpose() * A * Bb * data.weighted_measure[p];
 
 						H.template block<dim, dim>(a * d, b * d) += Kab;
 					}

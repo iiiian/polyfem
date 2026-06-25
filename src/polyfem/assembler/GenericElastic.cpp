@@ -13,6 +13,8 @@
 
 #include <polyfem/utils/Logger.hpp>
 
+#include <algorithm>
+
 namespace polyfem::assembler
 {
 
@@ -104,63 +106,71 @@ namespace polyfem::assembler
 	}
 
 	template <typename Derived>
-	double GenericElastic<Derived>::compute_energy(const NonLinearAssemblerData &data) const
+	double GenericElastic<Derived>::compute_energy(const NonLinearElementAssemblyData &data) const
 	{
 		return compute_energy_aux<double>(data);
 	}
 
 	template <typename Derived>
-	Eigen::VectorXd GenericElastic<Derived>::assemble_gradient(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
 		if (autodiff_type_ == AutodiffType::FULL)
-			return assemble_gradient_full_ad(data);
+		{
+			assemble_gradient_full_ad(data, local_gradient);
+		}
 		else if (autodiff_type_ == AutodiffType::STRESS)
 		{
 #ifndef NDEBUG
-			auto grad = assemble_gradient_stress_ad(data);
-			auto grad_full = assemble_gradient_full_ad(data);
+			Eigen::VectorXd grad(local_gradient.size());
+			Eigen::VectorXd grad_full(local_gradient.size());
+			assemble_gradient_stress_ad(data, span<double>(grad.data(), grad.size()));
+			assemble_gradient_full_ad(data, span<double>(grad_full.data(), grad_full.size()));
 			assert((std::isnan(grad.norm()) && std::isnan(grad_full.norm())) || (grad - grad_full).norm() < 1e-6);
 #endif
-			return assemble_gradient_stress_ad(data);
+			assemble_gradient_stress_ad(data, local_gradient);
 		}
 		else
 		{
 #ifndef NDEBUG
-			auto grad = assemble_gradient_stress_noad(data);
-			auto grad_full = assemble_gradient_stress_ad(data);
+			Eigen::VectorXd grad(local_gradient.size());
+			Eigen::VectorXd grad_full(local_gradient.size());
+			assemble_gradient_stress_noad(data, span<double>(grad.data(), grad.size()));
+			assemble_gradient_stress_ad(data, span<double>(grad_full.data(), grad_full.size()));
 			assert((std::isnan(grad.norm()) && std::isnan(grad_full.norm())) || (grad - grad_full).norm() < 1e-6);
 #endif
-			return assemble_gradient_stress_noad(data);
+			assemble_gradient_stress_noad(data, local_gradient);
 		}
 	}
 
 	template <typename Derived>
-	Eigen::VectorXd GenericElastic<Derived>::assemble_gradient_full_ad(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_gradient_full_ad(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
-		const int n_bases = data.vals.basis_values.size();
-		return polyfem::gradient_from_energy(
+		const int n_bases = data.basis_num;
+		Eigen::VectorXd gradient = polyfem::gradient_from_energy(
 			size(), n_bases, data,
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 6, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 8, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 12, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 18, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 24, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 30, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 60, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 81, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, SMALL_N, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, BIG_N, 1>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar1<double, Eigen::VectorXd>>(data); });
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 6, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 8, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 12, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 18, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 24, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 30, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 60, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, 81, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, SMALL_N, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, BIG_N, 1>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar1<double, Eigen::VectorXd>>(data); });
+		assert(gradient.size() == local_gradient.size());
+		std::copy(gradient.data(), gradient.data() + gradient.size(), local_gradient.data());
 	}
 
 	template <typename Derived>
-	Eigen::VectorXd GenericElastic<Derived>::assemble_gradient_stress_ad(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_gradient_stress_ad(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
 		Eigen::Matrix<double, Eigen::Dynamic, 1> gradient;
 
 		if (size() == 2)
 		{
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 3:
 			{
@@ -182,7 +192,7 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				gradient.resize(data.vals.basis_values.size() * 2);
+				gradient.resize(data.basis_num * 2);
 				compute_gradient_from_stress<Eigen::Dynamic, 2>(data, gradient);
 				break;
 			}
@@ -191,7 +201,7 @@ namespace polyfem::assembler
 		else // if (size() == 3)
 		{
 			assert(size() == 3);
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 4:
 			{
@@ -213,24 +223,25 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				gradient.resize(data.vals.basis_values.size() * 3);
+				gradient.resize(data.basis_num * 3);
 				compute_gradient_from_stress<Eigen::Dynamic, 3>(data, gradient);
 				break;
 			}
 			}
 		}
 
-		return gradient;
+		assert(gradient.size() == local_gradient.size());
+		std::copy(gradient.data(), gradient.data() + gradient.size(), local_gradient.data());
 	}
 
 	template <typename Derived>
-	Eigen::VectorXd GenericElastic<Derived>::assemble_gradient_stress_noad(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_gradient_stress_noad(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
 		Eigen::Matrix<double, Eigen::Dynamic, 1> gradient;
 
 		if (size() == 2)
 		{
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 3:
 			{
@@ -252,7 +263,7 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				gradient.resize(data.vals.basis_values.size() * 2);
+				gradient.resize(data.basis_num * 2);
 				compute_gradient_from_stress_noad<Eigen::Dynamic, 2>(data, gradient);
 				break;
 			}
@@ -261,7 +272,7 @@ namespace polyfem::assembler
 		else // if (size() == 3)
 		{
 			assert(size() == 3);
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 4:
 			{
@@ -283,67 +294,79 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				gradient.resize(data.vals.basis_values.size() * 3);
+				gradient.resize(data.basis_num * 3);
 				compute_gradient_from_stress_noad<Eigen::Dynamic, 3>(data, gradient);
 				break;
 			}
 			}
 		}
 
-		return gradient;
+		assert(gradient.size() == local_gradient.size());
+		std::copy(gradient.data(), gradient.data() + gradient.size(), local_gradient.data());
 	}
 
 	template <typename Derived>
-	Eigen::MatrixXd GenericElastic<Derived>::assemble_hessian(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
 		if (autodiff_type_ == AutodiffType::FULL)
-			return assemble_hessian_full_ad(data);
+		{
+			assemble_hessian_full_ad(data, local_hessian);
+		}
 		else if (autodiff_type_ == AutodiffType::STRESS)
 		{
 #ifndef NDEBUG
-			auto hessian = assemble_hessian_stress_ad(data);
-			auto hessian_full = assemble_hessian_full_ad(data);
+			Eigen::VectorXd hessian(local_hessian.size());
+			Eigen::VectorXd hessian_full(local_hessian.size());
+			assemble_hessian_stress_ad(data, span<double>(hessian.data(), hessian.size()));
+			assemble_hessian_full_ad(data, span<double>(hessian_full.data(), hessian_full.size()));
 			assert((std::isnan(hessian.norm()) && std::isnan(hessian_full.norm())) || (hessian - hessian_full).norm() < 1e-5);
 #endif
-			return assemble_hessian_stress_ad(data);
+			assemble_hessian_stress_ad(data, local_hessian);
 		}
 		else
 		{
 #ifndef NDEBUG
-			auto hessian = assemble_hessian_stress_noad(data);
-			auto hessian_full = assemble_hessian_stress_ad(data);
+			Eigen::VectorXd hessian(local_hessian.size());
+			Eigen::VectorXd hessian_full(local_hessian.size());
+			assemble_hessian_stress_noad(data, span<double>(hessian.data(), hessian.size()));
+			assemble_hessian_stress_ad(data, span<double>(hessian_full.data(), hessian_full.size()));
 			assert((std::isnan(hessian.norm()) && std::isnan(hessian_full.norm())) || (hessian - hessian_full).norm() < 1e-5);
 #endif
-			return assemble_hessian_stress_noad(data);
+			assemble_hessian_stress_noad(data, local_hessian);
 		}
 	}
 
 	template <typename Derived>
-	Eigen::MatrixXd GenericElastic<Derived>::assemble_hessian_full_ad(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_hessian_full_ad(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
-		const int n_bases = data.vals.basis_values.size();
-		return polyfem::hessian_from_energy(
+		const int n_bases = data.basis_num;
+		Eigen::MatrixXd hessian = polyfem::hessian_from_energy(
 			size(), n_bases, data,
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 6, 1>, Eigen::Matrix<double, 6, 6>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 8, 1>, Eigen::Matrix<double, 8, 8>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 12, 1>, Eigen::Matrix<double, 12, 12>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 18, 1>, Eigen::Matrix<double, 18, 18>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 24, 1>, Eigen::Matrix<double, 24, 24>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 30, 1>, Eigen::Matrix<double, 30, 30>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 60, 1>, Eigen::Matrix<double, 60, 60>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 81, 1>, Eigen::Matrix<double, 81, 81>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, SMALL_N, 1>, Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, SMALL_N, SMALL_N>>>(data); },
-			[&](const NonLinearAssemblerData &data) { return compute_energy_aux<DScalar2<double, Eigen::VectorXd, Eigen::MatrixXd>>(data); });
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 6, 1>, Eigen::Matrix<double, 6, 6>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 8, 1>, Eigen::Matrix<double, 8, 8>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 12, 1>, Eigen::Matrix<double, 12, 12>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 18, 1>, Eigen::Matrix<double, 18, 18>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 24, 1>, Eigen::Matrix<double, 24, 24>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 30, 1>, Eigen::Matrix<double, 30, 30>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 60, 1>, Eigen::Matrix<double, 60, 60>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, 81, 1>, Eigen::Matrix<double, 81, 81>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::Matrix<double, Eigen::Dynamic, 1, 0, SMALL_N, 1>, Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, 0, SMALL_N, SMALL_N>>>(data); },
+			[&](const NonLinearElementAssemblyData &data) { return compute_energy_aux<DScalar2<double, Eigen::VectorXd, Eigen::MatrixXd>>(data); });
+		int local_matrix_size = n_bases * size();
+		assert(local_hessian.size() == local_matrix_size * local_matrix_size);
+		Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> local_hessian_mat(
+			local_hessian.data(), local_matrix_size, local_matrix_size);
+		local_hessian_mat = hessian;
 	}
 
 	template <typename Derived>
-	Eigen::MatrixXd GenericElastic<Derived>::assemble_hessian_stress_ad(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_hessian_stress_ad(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
 		Eigen::MatrixXd hessian;
 
 		if (size() == 2)
 		{
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 3:
 			{
@@ -368,7 +391,7 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				hessian.resize(data.vals.basis_values.size() * 2, data.vals.basis_values.size() * 2);
+				hessian.resize(data.basis_num * 2, data.basis_num * 2);
 				hessian.setZero();
 				compute_hessian_from_stress<Eigen::Dynamic, 2>(data, hessian);
 				break;
@@ -378,7 +401,7 @@ namespace polyfem::assembler
 		else // if (size() == 3)
 		{
 			assert(size() == 3);
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 4:
 			{
@@ -403,7 +426,7 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				hessian.resize(data.vals.basis_values.size() * 3, data.vals.basis_values.size() * 3);
+				hessian.resize(data.basis_num * 3, data.basis_num * 3);
 				hessian.setZero();
 				compute_hessian_from_stress<Eigen::Dynamic, 3>(data, hessian);
 				break;
@@ -411,17 +434,21 @@ namespace polyfem::assembler
 			}
 		}
 
-		return hessian;
+		int local_matrix_size = data.basis_num * size();
+		assert(local_hessian.size() == local_matrix_size * local_matrix_size);
+		Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> local_hessian_mat(
+			local_hessian.data(), local_matrix_size, local_matrix_size);
+		local_hessian_mat = hessian;
 	}
 
 	template <typename Derived>
-	Eigen::MatrixXd GenericElastic<Derived>::assemble_hessian_stress_noad(const NonLinearAssemblerData &data) const
+	void GenericElastic<Derived>::assemble_hessian_stress_noad(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
 		Eigen::MatrixXd hessian;
 
 		if (size() == 2)
 		{
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 3:
 			{
@@ -446,7 +473,7 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				hessian.resize(data.vals.basis_values.size() * 2, data.vals.basis_values.size() * 2);
+				hessian.resize(data.basis_num * 2, data.basis_num * 2);
 				hessian.setZero();
 				compute_hessian_from_stress_noad<Eigen::Dynamic, 2>(data, hessian);
 				break;
@@ -456,7 +483,7 @@ namespace polyfem::assembler
 		else // if (size() == 3)
 		{
 			assert(size() == 3);
-			switch (data.vals.basis_values.size())
+			switch (data.basis_num)
 			{
 			case 4:
 			{
@@ -481,7 +508,7 @@ namespace polyfem::assembler
 			}
 			default:
 			{
-				hessian.resize(data.vals.basis_values.size() * 3, data.vals.basis_values.size() * 3);
+				hessian.resize(data.basis_num * 3, data.basis_num * 3);
 				hessian.setZero();
 				compute_hessian_from_stress_noad<Eigen::Dynamic, 3>(data, hessian);
 				break;
@@ -489,7 +516,11 @@ namespace polyfem::assembler
 			}
 		}
 
-		return hessian;
+		int local_matrix_size = data.basis_num * size();
+		assert(local_hessian.size() == local_matrix_size * local_matrix_size);
+		Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> local_hessian_mat(
+			local_hessian.data(), local_matrix_size, local_matrix_size);
+		local_hessian_mat = hessian;
 	}
 
 	template <typename Derived>

@@ -21,7 +21,7 @@ namespace polyfem::assembler
 		std::map<std::string, ParamFunc> parameters() const override;
 
 		// navier stokes is not energy based
-		double compute_energy(const NonLinearAssemblerData &data) const override
+		double compute_energy(const NonLinearElementAssemblyData &data) const override
 		{
 			// not used, this formulation is gradient based!
 			assert(false);
@@ -30,12 +30,10 @@ namespace polyfem::assembler
 
 		// res is R^{dim²}
 		// pde
-		Eigen::VectorXd
-		assemble_gradient(const NonLinearAssemblerData &data) const override;
+		void assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const override;
 
-		Eigen::MatrixXd
 		// gradient of pde, this returns full gradient or partil depending on the template
-		assemble_hessian(const NonLinearAssemblerData &data) const override;
+		void assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const override;
 
 		// rhs for fabbricated solution
 		VectorNd compute_rhs(const AutodiffHessianPt &pt) const override;
@@ -54,8 +52,8 @@ namespace polyfem::assembler
 		// not full graidnet used for Picard iteration
 		bool full_gradient_ = true;
 
-		Eigen::MatrixXd compute_N(const NonLinearAssemblerData &data) const;
-		Eigen::MatrixXd compute_W(const NonLinearAssemblerData &data) const;
+		Eigen::MatrixXd compute_N(const NonLinearElementAssemblyData &data) const;
+		Eigen::MatrixXd compute_W(const NonLinearElementAssemblyData &data) const;
 	};
 
 } // namespace polyfem::assembler

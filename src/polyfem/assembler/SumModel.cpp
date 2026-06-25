@@ -2,6 +2,9 @@
 
 #include <jse/jse.h>
 
+#include <algorithm>
+#include <vector>
+
 // #include <polyfem/basis/Basis.hpp>
 // #include <polyfem/autogen/auto_elasticity_rhs.hpp>
 
@@ -40,31 +43,33 @@ namespace polyfem::assembler
 		return res;
 	}
 
-	Eigen::VectorXd
-	SumModel::assemble_gradient(const NonLinearAssemblerData &data) const
+	void SumModel::assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const
 	{
-		Eigen::VectorXd gradient = assemblers_.front()->assemble_gradient(data);
-		for (size_t i = 1; i < assemblers_.size(); ++i)
+		std::fill(local_gradient.begin(), local_gradient.end(), 0.0);
+		std::vector<double> temp_gradient(local_gradient.size());
+		for (const auto &assembler : assemblers_)
 		{
-			const auto assembler = assemblers_[i];
-			gradient += assembler->assemble_gradient(data);
+			std::fill(temp_gradient.begin(), temp_gradient.end(), 0.0);
+			assembler->assemble_gradient(data, span<double>(temp_gradient.data(), temp_gradient.size()));
+			for (int i = 0; i < local_gradient.size(); ++i)
+				local_gradient[i] += temp_gradient[i];
 		}
-		return gradient;
 	}
 
-	Eigen::MatrixXd
-	SumModel::assemble_hessian(const NonLinearAssemblerData &data) const
+	void SumModel::assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const
 	{
-		Eigen::MatrixXd hessian = assemblers_.front()->assemble_hessian(data);
-		for (size_t i = 1; i < assemblers_.size(); ++i)
+		std::fill(local_hessian.begin(), local_hessian.end(), 0.0);
+		std::vector<double> temp_hessian(local_hessian.size());
+		for (const auto &assembler : assemblers_)
 		{
-			const auto assembler = assemblers_[i];
-			hessian += assembler->assemble_hessian(data);
+			std::fill(temp_hessian.begin(), temp_hessian.end(), 0.0);
+			assembler->assemble_hessian(data, span<double>(temp_hessian.data(), temp_hessian.size()));
+			for (int i = 0; i < local_hessian.size(); ++i)
+				local_hessian[i] += temp_hessian[i];
 		}
-		return hessian;
 	}
 
-	double SumModel::compute_energy(const NonLinearAssemblerData &data) const
+	double SumModel::compute_energy(const NonLinearElementAssemblyData &data) const
 	{
 		double energy = assemblers_.front()->compute_energy(data);
 		for (size_t i = 1; i < assemblers_.size(); ++i)

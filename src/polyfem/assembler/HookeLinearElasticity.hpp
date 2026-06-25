@@ -22,11 +22,11 @@ namespace polyfem::assembler
 		void assemble_element(const LinearElementAssemblyData &data, span<double> local_element_matrix) const override;
 
 		// compute elastic energy
-		double compute_energy(const NonLinearAssemblerData &data) const override;
+		double compute_energy(const NonLinearElementAssemblyData &data) const override;
 		// neccessary for mixing linear model with non-linear collision response
-		Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const override;
+		void assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const override;
 		// compute gradient of elastic energy, as assembler
-		Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const override;
+		void assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const override;
 
 		VectorNd compute_rhs(const AutodiffHessianPt &pt) const override;
 
@@ -59,6 +59,6 @@ namespace polyfem::assembler
 		// double compute_energy is the same with T=double
 		// assemble_gradient is the same with T=DScalar1 and return .getGradient()
 		template <typename T>
-		T compute_energy_aux(const NonLinearAssemblerData &data) const;
+		T compute_energy_aux(const NonLinearElementAssemblyData &data) const;
 	};
 } // namespace polyfem::assembler

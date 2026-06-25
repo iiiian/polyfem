@@ -17,9 +17,9 @@ namespace polyfem::assembler
 		using ElasticityNLAssembler::assemble_gradient;
 		using ElasticityNLAssembler::assemble_hessian;
 
-		double compute_energy(const NonLinearAssemblerData &data) const override;
-		Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const override;
-		Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const override;
+		double compute_energy(const NonLinearElementAssemblyData &data) const override;
+		void assemble_gradient(const NonLinearElementAssemblyData &data, span<double> local_gradient) const override;
+		void assemble_hessian(const NonLinearElementAssemblyData &data, span<double> local_hessian) const override;
 
 		VectorNd compute_rhs(const AutodiffHessianPt &pt) const override;
 
@@ -48,6 +48,6 @@ namespace polyfem::assembler
 		T stress(const ElasticityTensor &elasticity_tensor, const std::array<T, N> &strain, const int j) const;
 
 		template <typename T>
-		T compute_energy_aux(const NonLinearAssemblerData &data) const;
+		T compute_energy_aux(const NonLinearElementAssemblyData &data) const;
 	};
 } // namespace polyfem::assembler

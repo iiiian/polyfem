@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <polyfem/basis/Basis.hpp>
 #include <polyfem/quadrature/Quadrature.hpp>
 #include <polyfem/mesh/Mesh.hpp>
@@ -196,6 +197,25 @@ namespace polyfem::basis::ng
 		int order;
 		int orderq;
 		uint8_t dim;
+		int element_basis_num; // new
+		// If this id is not -1, central dispatcher is not available.
+		// In such case, we will always cache basis/basis grad on host.
+		int fallback_eval_callback_id = -1;
+		// Callback signature design. Eval basis value and grad for one element:
+		// void eval(
+		//   span<const double> point_x, // Quad point x
+		//   span<const double> point_y, // Quad point y. Empty for 1D elem.
+		//   span<const double> point_z, // Quad point z. Empty for 1D/2D elem.
+		//   span<double> values,        // Basis value out. Already the right size.
+		//   span<double> grad_x,        // Basis gradient x out. Already the right size.
+		//   span<double> grad_y,        // Basis gradient y out. Empty for 1D elem.
+		//   span<double> grad_z         // Basis gradient z out. Empty for 1D/2D elem.
+		// )
+		//
+		// For poly basis, both quad point and basis grad lives in physical space.
+		// For others, they lives in reference space.
+
+		// Lagrange
 		bool is_bernstein;
 
 		// Rational
@@ -205,11 +225,13 @@ namespace polyfem::basis::ng
 	struct BasisStoreView
 	{
 		span<const double> rational_weights;
+		// span of std::function here.
 	};
 
 	struct BasisStore
 	{
 		std::vector<double> rational_weights;
+		// vector of std::function here
 
 		BasisStoreView view() const { return BasisStoreView{rational_weights}; }
 	};

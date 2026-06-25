@@ -121,7 +121,7 @@ namespace polyfem::assembler
 		AssemblyCacheView view() const;
 
 		// Resize all storage to zero without actually freeing the memory.
-		void reset();
+		void clear();
 	};
 
 	/// Temporary storage for intermediate value during geometry mapping evaluation.
