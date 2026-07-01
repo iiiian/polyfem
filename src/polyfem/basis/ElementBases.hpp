@@ -5,112 +5,167 @@
 #include <polyfem/mesh/Mesh.hpp>
 
 #include <polyfem/assembler/AssemblyValues.hpp>
+#include <polyfem/utils/Span.hpp>
+#include <polyfem/utils/Range.hpp>
 
 #include <vector>
+#include <cstdint>
 
-namespace polyfem
+namespace polyfem::basis::ng
 {
-	namespace basis
+
+	enum class ElementKind : uint8_t
 	{
-		/// @brief Stores the basis functions for a given element in a mesh (facet in 2d, cell in 3d).
-		class ElementBases
-		{
-		public:
-			typedef std::function<Eigen::VectorXi(const int local_index, const mesh::Mesh &mesh)> LocalNodeFromPrimitiveFunc;
+		Simplex,
+		Quad,
+		Hex,
+		Prism,
+		Pyramid,
+		Polygon,
+		Polyhedron
+	};
 
-			// function type that evaluates bases at given points and saves them in basis_values
-			typedef std::function<void(const Eigen::MatrixXd &uv, std::vector<assembler::AssemblyValues> &basis_values)> EvalBasesFunc;
+	enum class BasisFamily : uint8_t
+	{
+		Lagrange, // This represents lagrange + berstein.
+		Rational,
+		QuadraticSpline,
+		PolyRbf,
+		Barycentric
+	};
 
-			// function type that computes quadrature points and saves them in quadrature
-			typedef std::function<void(quadrature::Quadrature &quadrature)> QuadratureFunction;
+	struct BasisDesc
+	{
+		// Common
+		ElementKind element_kind;
+		BasisFamily basis_family;
+		int order;
+		int orderq;
+		uint8_t dim;
+		int element_basis_num; // new
+		// If this id is not -1, central dispatcher is not available.
+		// In such case, we will always cache basis/basis grad on host.
+		int fallback_eval_callback_id = -1;
+		// Callback signature design. Eval basis value and grad for one element:
+		// void eval(
+		//   Span<const double> point_x, // Quad point x
+		//   Span<const double> point_y, // Quad point y. Empty for 1D elem.
+		//   Span<const double> point_z, // Quad point z. Empty for 1D/2D elem.
+		//   Span<double> values,        // Basis value out. Already the right size.
+		//   Span<double> grad_x,        // Basis gradient x out. Already the right size.
+		//   Span<double> grad_y,        // Basis gradient y out. Empty for 1D elem.
+		//   Span<double> grad_z         // Basis gradient z out. Empty for 1D/2D elem.
+		// )
+		//
+		// For poly basis, both quad point and basis grad lives in physical space.
+		// For others, they lives in reference space.
 
-			std::vector<Basis> bases; ///< one basis function per node in the element
+		// Lagrange
+		bool is_bernstein;
 
-			/// Assemble the global nodal positions of the bases.
-			Eigen::MatrixXd nodes() const;
+		// Rational
+		Range rational_weight_range;
+	};
 
-			/// quadrature points to evaluate the basis functions inside the element
-			void compute_quadrature(quadrature::Quadrature &quadrature) const { quadrature_builder_(quadrature); }
-			void compute_mass_quadrature(quadrature::Quadrature &quadrature) const { mass_quadrature_builder_(quadrature); }
-			Eigen::VectorXi local_nodes_for_primitive(const int local_index, const mesh::Mesh &mesh) const { return local_node_from_primitive_(local_index, mesh); }
+	struct BasisStoreView
+	{
+		Span<const double> rational_weights;
+		// span of std::function here.
+	};
 
-			// whether the basis functions should be evaluated in the parametric domain (FE bases),
-			// or directly in the object domain (harmonic bases)
-			bool has_parameterization = true;
+	struct BasisStore
+	{
+		std::vector<double> rational_weights;
+		// vector of std::function here
 
-			/// @brief Map the sample positions in the parametric domain to the object domain (if the element has no parameterization, e.g. harmonic bases, then the parametric domain = object domain,
-			/// and the mapping is identity)
-			///
-			/// @param[in] samples #S x dim matrix of sample positions to evaluate
-			/// @param[out] mapped #S x dim matrix of mapped positions
-			void eval_geom_mapping(const Eigen::MatrixXd &samples, Eigen::MatrixXd &mapped) const;
+		BasisStoreView view() const { return BasisStoreView{rational_weights}; }
+	};
 
-			/// @brief Evaluate the gradients of the geometric mapping defined above
-			///
-			/// @param[in] samples #S x dim matrix of input sample positions
-			/// @param[out] grads #S list of dim x dim matrices of gradients
-			void eval_geom_mapping_grads(const Eigen::MatrixXd &samples, std::vector<Eigen::MatrixXd> &grads) const;
+	struct ElementDesc
+	{
+		QuadratureDesc quadrature_desc;
+		QuadratureDesc mass_quadrature_desc;
+		BasisDesc basis_desc;
+		Range dof_mapping_range;
+		bool has_parameterization;
+	};
 
-			/// @brief Checks if all the bases are complete
-			bool is_complete() const;
+	struct ElementBasesView
+	{
+		Span<const ElementDesc> element_desc;
+		QuadratureStoreView quadrature;
+		QuadratureStoreView mass_quadrature;
+		DofMappingStoreView dof_mapping;
+		BasisStoreView basis;
+	};
 
-			friend std::ostream &operator<<(std::ostream &os, const ElementBases &obj)
-			{
-				for (std::size_t i = 0; i < obj.bases.size(); ++i)
-					os << "local base " << i << ":\n"
-					   << obj.bases[i] << "\n";
+	class ElementBases
+	{
+	public:
+		std::vector<ElementDesc> element_desc;
+		QuadratureStore quadrature_store;
+		QuadratureStore mass_quadrature_store;
+		DofMappingStore dof_mapping_store;
+		BasisStore basis_store;
 
-				return os;
-			}
+		ElementBasesView view() const;
 
-			void set_quadrature(const QuadratureFunction &fun) { quadrature_builder_ = fun; }
-			void set_mass_quadrature(const QuadratureFunction &fun) { mass_quadrature_builder_ = fun; }
+		// ----------------------------------------------
+		// Legacy
+		// ----------------------------------------------
+		using LocalNodeFromPrimitiveFunc = std::function<Eigen::VectorXi(const int local_index, const mesh::Mesh &mesh)>;
+		[[deprecated]] std::vector<LocalNodeFromPrimitiveFunc> legacy_local_nodes_form_primitive_callbacks;
+	};
 
-			/// evaluate stored bases at given points on the reference element
-			/// saves results to basis_values
-			void evaluate_bases(const Eigen::MatrixXd &uv, std::vector<assembler::AssemblyValues> &basis_values) const
-			{
-				if (eval_bases_func_)
-				{
-					eval_bases_func_(uv, basis_values);
-				}
-				else
-				{
-					evaluate_bases_default(uv, basis_values);
-				}
-			}
-			/// evaluate gradient of stored bases at given points on the reference element
-			/// saves results to basis_values
-			void evaluate_grads(const Eigen::MatrixXd &uv, std::vector<assembler::AssemblyValues> &basis_values) const
-			{
-				if (eval_grads_func_)
-				{
-					eval_grads_func_(uv, basis_values);
-				}
-				else
-				{
-					evaluate_grads_default(uv, basis_values);
-				}
-			}
+	int local_basis_num(const BasisDesc &basis_desc);
 
-			void set_bases_func(EvalBasesFunc fun) { eval_bases_func_ = fun; }
-			void set_grads_func(EvalBasesFunc fun) { eval_grads_func_ = fun; }
+	void eval_basis_values_at_points(
+		const ElementBasesView &bases,
+		int element_id,
+		int n_points,
+		Span<const double> point_x,
+		Span<const double> point_y,
+		Span<const double> point_z,
+		Span<double> values);
 
-			/// sets mapping from local nodes to global nodes
-			void set_local_node_from_primitive_func(LocalNodeFromPrimitiveFunc fun) { local_node_from_primitive_ = fun; }
+	void eval_basis_gradients_at_points(
+		const ElementBasesView &bases,
+		int element_id,
+		int n_points,
+		Span<const double> point_x,
+		Span<const double> point_y,
+		Span<const double> point_z,
+		Span<double> grad_x,
+		Span<double> grad_y,
+		Span<double> grad_z);
 
-		private:
-			/// default to simply calling the Basis evaluation functions
-			void evaluate_bases_default(const Eigen::MatrixXd &uv, std::vector<assembler::AssemblyValues> &basis_values) const;
-			void evaluate_grads_default(const Eigen::MatrixXd &uv, std::vector<assembler::AssemblyValues> &basis_values) const;
+	void eval_basis_values_at_quadrature(
+		const ElementBasesView &bases,
+		int element_id,
+		bool is_mass,
+		Span<double> values);
 
-		private:
-			EvalBasesFunc eval_bases_func_;
-			EvalBasesFunc eval_grads_func_;
-			QuadratureFunction quadrature_builder_;
-			QuadratureFunction mass_quadrature_builder_;
+	void eval_basis_gradients_at_quadrature(
+		const ElementBasesView &bases,
+		int element_id,
+		bool is_mass,
+		Span<double> grad_x,
+		Span<double> grad_y,
+		Span<double> grad_z);
 
-			LocalNodeFromPrimitiveFunc local_node_from_primitive_;
-		};
-	} // namespace basis
-} // namespace polyfem
+	void eval_geometry_mapping(
+		const ElementBasesView &geometry_bases,
+		int element_id,
+		int n_points,
+		Span<const double> basis_values,
+		Span<const double> basis_grad_x,
+		Span<const double> basis_grad_y,
+		Span<const double> basis_grad_z,
+		Span<double> mapped_x,
+		Span<double> mapped_y,
+		Span<double> mapped_z,
+		Span<double> det_jacobian,
+		// Row-major per quadrature point: q * dim * dim + row * dim + col.
+		Span<double> jacobian_inverse_transpose);
+
+} // namespace polyfem::basis::ng
