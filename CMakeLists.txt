@@ -121,6 +121,34 @@ if (POLYFEM_SILENCE_DEP_WARNINGS)
 endif()
 
 ################################################################################
+# CUDA
+################################################################################
+
+if (POLYFEM_WITH_CUDA)
+  # If CMAKE_CUDA_ARCHITECTURES was not specified, set it to native.
+  if(DEFINED CMAKE_CUDA_ARCHITECTURES)
+    message(STATUS "CMAKE_CUDA_ARCHITECTURES was specified, skipping auto-detection")
+  else()
+    message(STATUS "CMAKE_CUDA_ARCHITECTURES was not specified, set it to native")
+    set(CMAKE_CUDA_ARCHITECTURES "native")
+  endif()
+  message(STATUS "Targeting CUDA_ARCHITECTURES \"${CMAKE_CUDA_ARCHITECTURES}\"")
+
+  # Enable CUDA support
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 17)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+  # We officially support cuda version 13.0.x to 13.3.x.
+  # Newer version might work but is not tested.
+  if(CMAKE_CUDA_COMPILER_VERSION VERSION_LESS "13.0")
+      message(FATAL_ERROR "CUDA version must be at least 13.0 (Found: ${CMAKE_CUDA_COMPILER_VERSION})")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL "13.4")
+      message(WARNING "CUDA version > 13.3.x (Found: ${CMAKE_CUDA_COMPILER_VERSION}). This version is not officially supported.")
+  endif()
+endif()
+
+################################################################################
 # Polyfem library
 ################################################################################
 
@@ -164,28 +192,24 @@ if (MSVC)
     add_compile_options(/bigobj)
 endif ()
 
-################################################################################
-# CUDA
-################################################################################
-
 if (POLYFEM_WITH_CUDA)
-  # If CMAKE_CUDA_ARCHITECTURES was not specified, set it to native.
-  if(DEFINED CMAKE_CUDA_ARCHITECTURES)
-    message(STATUS "CMAKE_CUDA_ARCHITECTURES was specified, skipping auto-detection")
-  else()
-    message(STATUS "CMAKE_CUDA_ARCHITECTURES was not specified, set it to native")
-    set(CMAKE_CUDA_ARCHITECTURES "native")
-  endif()
-  message(STATUS "Targeting CUDA_ARCHITECTURES \"${CMAKE_CUDA_ARCHITECTURES}\"")
+  # Let nvcc compile device code into multiple object file then link them.
+  # Just like what normal cpp program does.
+  set_target_properties(polyfem PROPERTIES
+      CUDA_SEPARABLE_COMPILATION ON
+      CUDA_RESOLVE_DEVICE_SYMBOLS ON
+  )
 
-  # Enable CUDA support
-  enable_language(CUDA)
-  set(CMAKE_CUDA_STANDARD 17)
-  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+  # Enable __device__ lambda
+  target_compile_options(polyfem PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>
+  )
+  # Relax device constexpr usage
+  target_compile_options(polyfem PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+  )
 
-  # Enalbe CUDA support for libraries.
-  set(IPC_TOOLKIT_WITH_CUDA ON)
-  set(POLYSOLVE_WITH_CUDA ON)
+  target_compile_definitions(polyfem PUBLIC POLYFEM_WITH_CUDA)
 endif()
 
 ################################################################################
@@ -198,7 +222,16 @@ if(WIN32)
     target_link_libraries(polyfem PUBLIC Eigen3::Eigen)
 endif()
 
+# CCCL
+if(POLYFEM_WITH_CUDA)
+  include(cccl)
+  target_link_libraries(polyfem PUBLIC CCCL::CCCL)
+endif()
+
 # polysolve
+if (POLYFEM_WITH_CUDA)
+  set(POLYSOLVE_WITH_CUDA ON)
+endif()
 include(polysolve)
 target_link_libraries(polyfem PUBLIC polysolve::polysolve)
 
@@ -213,6 +246,9 @@ if(NOT WIN32)
 endif()
 
 # IPC Toolkit
+if (POLYFEM_WITH_CUDA)
+  set(IPC_TOOLKIT_WITH_CUDA ON)
+endif()
 include(ipc_toolkit)
 target_link_libraries(polyfem PUBLIC ipc::toolkit)
 
