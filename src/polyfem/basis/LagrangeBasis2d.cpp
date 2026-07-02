@@ -2,7 +2,7 @@
 #include "LagrangeBasis2d.hpp"
 #include "polyfem/basis/BasisStore.hpp"
 
-#include <polyfem/basis/DispatchLagrange.hpp>
+#include <polyfem/basis/EvalLagrangeBasis.hpp>
 #include <polyfem/quadrature/TriQuadrature.hpp>
 #include <polyfem/quadrature/QuadQuadrature.hpp>
 #include <polyfem/autogen/auto_p_bases_nodes.hpp>
