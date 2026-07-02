@@ -1,6 +1,6 @@
 #pragma once
 
-#include <polyfem/basis/ElementBases.hpp>
+#include <polyfem/assembler/ElementBases.hpp>
 #include <polyfem/mesh/mesh3D/CMesh3D.hpp>
 #include <polyfem/mesh/mesh3D/NCMesh3D.hpp>
 #include <polyfem/mesh/LocalBoundary.hpp>
@@ -9,6 +9,9 @@
 #include <polyfem/mesh/MeshNodes.hpp>
 
 #include <Eigen/Dense>
+#include <map>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace polyfem
@@ -53,7 +56,7 @@ namespace polyfem
 				const bool has_polys,
 				const bool is_geom_bases,
 				const bool use_corner_quadrature,
-				std::vector<ElementBases> &bases,
+				assembler::ElementBases &bases,
 				std::vector<mesh::LocalBoundary> &local_boundary,
 				std::map<int, InterfaceData> &poly_face_to_data,
 				std::shared_ptr<mesh::MeshNodes> &mesh_nodes);
@@ -93,7 +96,7 @@ namespace polyfem
 				const bool has_polys,
 				const bool is_geom_bases,
 				const bool use_corner_quadrature,
-				std::vector<ElementBases> &bases,
+				assembler::ElementBases &bases,
 				std::vector<mesh::LocalBoundary> &local_boundary,
 				std::map<int, InterfaceData> &poly_face_to_data,
 				std::shared_ptr<mesh::MeshNodes> &mesh_nodes);
