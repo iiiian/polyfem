@@ -2,7 +2,7 @@
 #include "LagrangeBasis2d.hpp"
 #include "polyfem/basis/BasisStore.hpp"
 
-#include <polyfem/basis/EvalLagrangeBasis.hpp>
+#include <polyfem/basis/EvalBasis.hpp>
 #include <polyfem/quadrature/TriQuadrature.hpp>
 #include <polyfem/quadrature/QuadQuadrature.hpp>
 #include <polyfem/autogen/auto_p_bases_nodes.hpp>
@@ -1048,7 +1048,7 @@ int LagrangeBasis2d::build_bases(
 								auto node_pos_x = Span<const double>(node_position.col(0).data(), node_num);
 								auto node_pos_y = Span<const double>(node_position.col(1).data(), node_num);
 								BasisDesc basis_desc = bases.element_desc[opposite_element].basis_desc;
-								lagrange_basis_values(
+								basis_values(
 									basis_desc,
 									bases.basis.view(),
 									node_pos_x,
@@ -1158,7 +1158,7 @@ int LagrangeBasis2d::build_bases(
 								auto node_pos_x = Span<const double>(node_position.col(0).data(), node_num);
 								auto node_pos_y = Span<const double>(node_position.col(1).data(), node_num);
 								BasisDesc basis_desc = bases.element_desc[other_face].basis_desc;
-								lagrange_basis_values(
+								basis_values(
 									basis_desc,
 									bases.basis.view(),
 									node_pos_x,

@@ -3,7 +3,7 @@
 #include "LagrangeBasis3d.hpp"
 
 #include <polyfem/basis/Basis.hpp>
-#include <polyfem/basis/EvalLagrangeBasis.hpp>
+#include <polyfem/basis/EvalBasis.hpp>
 #include <polyfem/mesh/MeshNodes.hpp>
 #include <polyfem/quadrature/TetQuadrature.hpp>
 #include <polyfem/quadrature/HexQuadrature.hpp>
@@ -1269,12 +1269,12 @@ namespace
 		const int node_num = node_position.rows();
 		assert(node_num == 1);
 		const BasisDesc basis_desc = bases.element_desc[element_id].basis_desc;
-		Eigen::VectorXd values(lagrange_basis_count(basis_desc) * node_num);
+		Eigen::VectorXd values(basis_count(basis_desc) * node_num);
 
 		auto node_pos_x = Span<const double>(node_position.col(0).data(), node_num);
 		auto node_pos_y = Span<const double>(node_position.col(1).data(), node_num);
 		auto node_pos_z = Span<const double>(node_position.col(2).data(), node_num);
-		lagrange_basis_values(
+		basis_values(
 			basis_desc,
 			bases.basis.view(),
 			node_pos_x,

@@ -32,7 +32,7 @@ namespace polyfem::basis
 		return idx;
 	}
 
-	BasisStoreView BasisStore::view() const { return BasisStoreView{rational_weights_}; }
+	BasisStoreView BasisStore::view() const { return BasisStoreView{rational_weights_, eval_callbacks_}; }
 
 #ifdef POLYFEM_WITH_CUDA
 	/// Return view on device memory. Lazily sync data.
