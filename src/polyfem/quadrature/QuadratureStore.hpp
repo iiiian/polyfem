@@ -39,17 +39,17 @@ namespace polyfem::quadrature
 
 		POLYFEM_BOTH Span<const double> get_y(const QuadratureDesc &desc) const
 		{
-			return slice_by_range(x, desc.x_range);
+			return slice_by_range(y, desc.y_range);
 		}
 
 		POLYFEM_BOTH Span<const double> get_z(const QuadratureDesc &desc) const
 		{
-			return slice_by_range(x, desc.x_range);
+			return slice_by_range(z, desc.z_range);
 		}
 
 		POLYFEM_BOTH Span<const double> get_w(const QuadratureDesc &desc) const
 		{
-			return slice_by_range(x, desc.x_range);
+			return slice_by_range(w, desc.w_range);
 		}
 	};
 
