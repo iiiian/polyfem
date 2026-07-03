@@ -1,5 +1,6 @@
 #pragma once
 
+#include "polyfem/utils/CudaBoth.hpp"
 #include <polyfem/quadrature/Quadrature.hpp>
 
 #include <polyfem/utils/Span.hpp>
@@ -30,6 +31,26 @@ namespace polyfem::quadrature
 		Span<const double> y;
 		Span<const double> z;
 		Span<const double> w;
+
+		POLYFEM_BOTH Span<const double> get_x(const QuadratureDesc &desc) const
+		{
+			return slice_by_range(x, desc.x_range);
+		}
+
+		POLYFEM_BOTH Span<const double> get_y(const QuadratureDesc &desc) const
+		{
+			return slice_by_range(x, desc.x_range);
+		}
+
+		POLYFEM_BOTH Span<const double> get_z(const QuadratureDesc &desc) const
+		{
+			return slice_by_range(x, desc.x_range);
+		}
+
+		POLYFEM_BOTH Span<const double> get_w(const QuadratureDesc &desc) const
+		{
+			return slice_by_range(x, desc.x_range);
+		}
 	};
 
 	class QuadratureStore
@@ -42,10 +63,10 @@ namespace polyfem::quadrature
 
 #ifdef POLYFEM_WITH_CUDA
 		bool need_host_device_sync_ = true;
-		DBuf<double> d_x_;
-		DBuf<double> d_y_;
-		DBuf<double> d_z_;
-		DBuf<double> d_w_;
+		DeviceBuf<double> d_x_;
+		DeviceBuf<double> d_y_;
+		DeviceBuf<double> d_z_;
+		DeviceBuf<double> d_w_;
 #endif
 
 	public:

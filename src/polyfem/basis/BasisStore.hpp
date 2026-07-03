@@ -66,6 +66,7 @@ namespace polyfem::basis
 		int dim;
 		int basis_num;
 		int eval_callback_id;
+		int is_parametric;
 		// For poly basis, both quad point and basis grad lives in physical space.
 		// For others, they lives in reference space.
 
@@ -89,7 +90,7 @@ namespace polyfem::basis
 		std::vector<BasisEvalCallback> eval_callbacks_;
 
 #ifdef POLYFEM_WITH_CUDA
-		DBuf<double> d_rational_weights_;
+		DeviceBuf<double> d_rational_weights_;
 		// BasisEvalCallback can not be used on device.
 #endif
 

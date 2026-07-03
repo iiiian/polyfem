@@ -42,18 +42,22 @@ namespace polyfem::assembler
 
 	class ElementBases
 	{
-	private:
-		std::vector<ElementDesc> element_desc_;
-		quadrature::QuadratureStore quadrature_;
-		quadrature::QuadratureStore mass_quadrature_;
-		basis::BasisStore basis_;
-		DofMappingStore dof_mapping_;
+	public:
+		std::vector<ElementDesc> element_desc;
+		quadrature::QuadratureStore quadrature;
+		quadrature::QuadratureStore mass_quadrature;
+		basis::BasisStore basis;
+		DofMappingStore dof_mapping;
 
-		[[deprecated]] std::vector<LocalNodeFromPrimitiveFunc> legacy_local_nodes_from_primitive_;
+		[[deprecated]] std::vector<LocalNodeFromPrimitiveFunc> legacy_local_nodes_from_primitive;
 
 #ifdef POLYFEM_WITH_CUDA
 		bool need_host_device_sync_ = true;
-		DBuf<ElementDesc> d_element_desc_;
+#endif
+
+	private:
+#ifdef POLYFEM_WITH_CUDA
+		DeviceBuf<ElementDesc> d_element_desc_;
 #endif
 
 	public:

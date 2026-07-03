@@ -53,10 +53,10 @@ namespace polyfem::assembler
 
 #ifdef POLYFEM_WITH_CUDA
 		bool need_host_device_sync_ = true;
-		DBuf<DofMappingDesc> d_mapping_desc_;
-		DBuf<int> d_node_ids_;
-		DBuf<double> d_weights_;
-		DBuf<double> d_node_positions_;
+		DeviceBuf<DofMappingDesc> d_mapping_desc_;
+		DeviceBuf<int> d_node_ids_;
+		DeviceBuf<double> d_weights_;
+		DeviceBuf<double> d_node_positions_;
 #endif
 
 	public:
