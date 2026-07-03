@@ -785,7 +785,7 @@ namespace polyfem
 			{
 				bases.element_desc.push_back(ElementDesc{});
 				auto &element_desc = bases.element_desc.back();
-				element_desc.has_parameterization = !mesh.is_polytope(e);
+				const bool is_parametric = !mesh.is_polytope(e);
 				bases.legacy_local_nodes_from_primitive.push_back({});
 			}
 
@@ -860,6 +860,7 @@ namespace polyfem
 				basis_desc.dim = 2;
 				basis_desc.basis_num = 9;
 				basis_desc.eval_callback_id = bases.basis.append_eval_callback(make_spline_eval_callback(h_knots, v_knots));
+				basis_desc.is_parametric = is_parametric;
 				basis_desc.is_bernstein = false;
 
 				auto &element_mapping = element_dof_mappings[e];
@@ -896,6 +897,7 @@ namespace polyfem
 				basis_desc.dim = 2;
 				basis_desc.basis_num = 1; // TODO
 				basis_desc.eval_callback_id = -1;
+				basis_desc.is_parametric = is_parametric;
 				basis_desc.is_bernstein = false;
 
 				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {

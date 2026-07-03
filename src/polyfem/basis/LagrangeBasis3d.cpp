@@ -2484,7 +2484,7 @@ int LagrangeBasis3d::build_bases(
 		element_dof_mappings[e].resize(n_el_bases);
 		bases.element_desc.push_back(ElementDesc{});
 		auto &element_desc = bases.element_desc.back();
-		element_desc.has_parameterization = !mesh.is_polytope(e);
+		const bool is_parametric = !mesh.is_polytope(e);
 
 		bool skip_interface_element = false;
 
@@ -2531,6 +2531,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.dim = 3;
 			basis_desc.basis_num = 1; // TODO
 			basis_desc.eval_callback_id = -1;
+			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
 
 			bases.legacy_local_nodes_from_primitive.push_back([serendipity, discr_order, e](const int primitive_id, const Mesh &mesh) {
@@ -2569,6 +2570,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.dim = 3;
 			basis_desc.basis_num = 1; // TODO
 			basis_desc.eval_callback_id = -1;
+			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
 
 			bases.legacy_local_nodes_from_primitive.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
@@ -2607,6 +2609,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.dim = 3;
 			basis_desc.basis_num = 1; // TODO
 			basis_desc.eval_callback_id = -1;
+			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = false;
 
 			bases.legacy_local_nodes_from_primitive.push_back([discr_order, discr_orderq, e](const int primitive_id, const Mesh &mesh) {
@@ -2642,6 +2645,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.dim = 3;
 			basis_desc.basis_num = 1; // TODO
 			basis_desc.eval_callback_id = -1;
+			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = false;
 
 			bases.legacy_local_nodes_from_primitive.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {

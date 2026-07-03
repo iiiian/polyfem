@@ -25,7 +25,6 @@ namespace polyfem::assembler
 		quadrature::QuadratureDesc mass_quadrature_desc;
 		basis::BasisDesc basis_desc;
 		Range dof_mapping_range;
-		bool has_parameterization;
 	};
 
 	using LocalNodeFromPrimitiveFunc = std::function<Eigen::VectorXi(const int local_index, const mesh::Mesh &mesh)>;

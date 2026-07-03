@@ -748,7 +748,7 @@ int LagrangeBasis2d::build_bases(
 		element_dof_mappings[e].resize(n_el_bases);
 		bases.element_desc.push_back(ElementDesc{});
 		auto &element_desc = bases.element_desc.back();
-		element_desc.has_parameterization = !mesh.is_polytope(e);
+		const bool is_parametric = !mesh.is_polytope(e);
 
 		bool skip_interface_element = false;
 
@@ -799,6 +799,7 @@ int LagrangeBasis2d::build_bases(
 			basis_desc.dim = 2;
 			basis_desc.basis_num = 1; // TODO
 			basis_desc.eval_callback_id = -1;
+			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
 
 			// Build legacy callbacks.
@@ -839,6 +840,7 @@ int LagrangeBasis2d::build_bases(
 			basis_desc.dim = 2;
 			basis_desc.basis_num = 1; // TODO
 			basis_desc.eval_callback_id = -1;
+			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
 			if (rational)
 			{
