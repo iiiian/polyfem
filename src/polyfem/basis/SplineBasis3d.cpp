@@ -2,6 +2,7 @@
 
 #include "LagrangeBasis3d.hpp"
 #include "function/QuadraticBSpline3d.hpp"
+#include <polyfem/basis/EvalBasis.hpp>
 #include <polyfem/quadrature/HexQuadrature.hpp>
 
 #include <polyfem/assembler/AssemblerUtils.hpp>
@@ -67,6 +68,125 @@ namespace polyfem
 			private:
 				std::array<Matrix<int, 3, 3>, 3> space_;
 			};
+
+			typedef std::vector<std::vector<Local2Global>> LocalDofMappings;
+
+			BasisEvalCallback make_spline_eval_callback(
+				const std::array<std::array<double, 4>, 3> h_knots,
+				const std::array<std::array<double, 4>, 3> v_knots,
+				const std::array<std::array<double, 4>, 3> w_knots)
+			{
+				return [h_knots, v_knots, w_knots](
+						   Span<const double> quad_x,
+						   Span<const double> quad_y,
+						   Span<const double> quad_z,
+						   Span<double> values,
+						   Span<double> grad_x,
+						   Span<double> grad_y,
+						   Span<double> grad_z) {
+					assert(quad_y.size() == quad_x.size());
+					assert(quad_z.size() == quad_x.size());
+
+					const int n_points = quad_x.size();
+					Eigen::MatrixXd uv(n_points, 3);
+					for (int i = 0; i < n_points; ++i)
+					{
+						uv(i, 0) = quad_x[i];
+						uv(i, 1) = quad_y[i];
+						uv(i, 2) = quad_z[i];
+					}
+
+					for (int z = 0; z < 3; ++z)
+					{
+						for (int y = 0; y < 3; ++y)
+						{
+							for (int x = 0; x < 3; ++x)
+							{
+								const int local_index = 9 * z + 3 * y + x;
+								const QuadraticBSpline3d spline(h_knots[x], v_knots[y], w_knots[z]);
+
+								Eigen::MatrixXd value;
+								spline.interpolate(uv, value);
+								for (int q = 0; q < n_points; ++q)
+									values[local_index * n_points + q] = value(q);
+
+								Eigen::MatrixXd grad;
+								spline.derivative(uv, grad);
+								for (int q = 0; q < n_points; ++q)
+								{
+									grad_x[local_index * n_points + q] = grad(q, 0);
+									grad_y[local_index * n_points + q] = grad(q, 1);
+									grad_z[local_index * n_points + q] = grad(q, 2);
+								}
+							}
+						}
+					}
+				};
+			}
+
+			Eigen::MatrixXd evaluate_basis_values(const assembler::ElementBases &bases, const int element_id, const Eigen::MatrixXd &samples)
+			{
+				const BasisDesc basis_desc = bases.element_desc[element_id].basis_desc;
+				const int n_points = samples.rows();
+				const int n_bases = basis_count(basis_desc);
+				Eigen::VectorXd values(n_bases * n_points);
+
+				auto sample_x = Span<const double>(samples.col(0).data(), n_points);
+				auto sample_y = Span<const double>(samples.col(1).data(), n_points);
+				auto sample_z = Span<const double>(samples.col(2).data(), n_points);
+				basis_values(
+					basis_desc,
+					bases.basis.view(),
+					sample_x,
+					sample_y,
+					sample_z,
+					Span<double>(values.data(), values.size()));
+
+				Eigen::MatrixXd result(n_points, n_bases);
+				for (int i = 0; i < n_bases; ++i)
+					result.col(i) = values.segment(i * n_points, n_points);
+				return result;
+			}
+
+			bool is_complete(const LocalDofMappings &mappings)
+			{
+				for (const auto &mapping : mappings)
+				{
+					if (mapping.empty())
+						return false;
+				}
+				return true;
+			}
+
+			void append_dof_mappings(const int element_id, const int dim, const LocalDofMappings &mappings, assembler::ElementBases &bases)
+			{
+				if (mappings.empty())
+					return;
+
+				int first_mapping_id = 0;
+				for (int j = 0; j < mappings.size(); ++j)
+				{
+					const auto &mapping = mappings[j];
+					assert(!mapping.empty());
+
+					std::vector<int> node_ids;
+					std::vector<double> weights;
+					std::vector<double> node_positions;
+					for (const auto &entry : mapping)
+					{
+						node_ids.push_back(entry.index);
+						weights.push_back(entry.val);
+						for (int d = 0; d < dim; ++d)
+							node_positions.push_back(entry.node(d));
+					}
+
+					const int mapping_id = bases.dof_mapping.append(node_ids, weights, node_positions);
+					if (j == 0)
+						first_mapping_id = mapping_id;
+				}
+
+				bases.element_desc[element_id].dof_mapping_range = Range{first_mapping_id, int(mappings.size())};
+			}
 
 			bool is_edge_singular(const Navigation3D::Index &index, const Mesh3D &mesh)
 			{
@@ -575,7 +695,7 @@ namespace polyfem
 				}
 			}
 
-			void basis_for_regular_hex(MeshNodes &mesh_nodes, const SpaceMatrix &space, const std::array<std::array<double, 4>, 3> &h_knots, const std::array<std::array<double, 4>, 3> &v_knots, const std::array<std::array<double, 4>, 3> &w_knots, ElementBases &b)
+			void basis_for_regular_hex(MeshNodes &mesh_nodes, const SpaceMatrix &space, LocalDofMappings &b)
 			{
 				for (int z = 0; z < 3; ++z)
 				{
@@ -590,19 +710,14 @@ namespace polyfem
 								const auto node = mesh_nodes.node_position(global_index);
 								// loc_nodes(x, y, z);
 
-								b.bases[local_index].init(2, global_index, local_index, node);
-
-								const QuadraticBSpline3d spline(h_knots[x], v_knots[y], w_knots[z]);
-
-								b.bases[local_index].set_basis([spline](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { spline.interpolate(uv, val); });
-								b.bases[local_index].set_grad([spline](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { spline.derivative(uv, val); });
+								b[local_index].emplace_back(global_index, node, 1.0);
 							}
 						}
 					}
 				}
 			}
 
-			void basis_for_irregulard_hex(const int el_index, const Mesh3D &mesh, MeshNodes &mesh_nodes, const SpaceMatrix &space, const std::array<std::array<double, 4>, 3> &h_knots, const std::array<std::array<double, 4>, 3> &v_knots, const std::array<std::array<double, 4>, 3> &w_knots, ElementBases &b, std::map<int, InterfaceData> &poly_face_to_data)
+			void basis_for_irregulard_hex(const int el_index, const Mesh3D &mesh, MeshNodes &mesh_nodes, const SpaceMatrix &space, LocalDofMappings &b, std::map<int, InterfaceData> &poly_face_to_data)
 			{
 				for (int z = 0; z < 3; ++z)
 				{
@@ -671,10 +786,10 @@ namespace polyfem
 								else
 									assert(false);
 
-								const auto &center = b.bases[zz * 9 + yy * 3 + xx].global().front();
+								const auto &center = b[zz * 9 + yy * 3 + xx].front();
 
-								const auto &el1 = b.bases[mpz * 9 + mpy * 3 + mpx].global().front();
-								const auto &el2 = b.bases[mmz * 9 + mmy * 3 + mmx].global().front();
+								const auto &el1 = b[mpz * 9 + mpy * 3 + mpx].front();
+								const auto &el2 = b[mmz * 9 + mmy * 3 + mmx].front();
 
 								std::vector<int> ids;
 								get_edge_elements_neighs(mesh, mesh_nodes, el_index, edge_id, dir, ids);
@@ -699,26 +814,26 @@ namespace polyfem
 									}
 								}
 
-								auto &base = b.bases[local_index];
+								auto &base = b[local_index];
 
 								const int k = int(other_indices.size()) + 3;
 
 								// const bool is_interface = mesh_nodes.is_interface(center.index);
 								// const int face_id = is_interface ? mesh_nodes.face_from_node_id(center.index) : -1;
 
-								base.global().resize(k);
+								base.resize(k);
 
-								base.global()[0].index = center.index;
-								base.global()[0].val = (4. - k) / k;
-								base.global()[0].node = center.node;
+								base[0].index = center.index;
+								base[0].val = (4. - k) / k;
+								base[0].node = center.node;
 
-								base.global()[1].index = el1.index;
-								base.global()[1].val = (4. - k) / k;
-								base.global()[1].node = el1.node;
+								base[1].index = el1.index;
+								base[1].val = (4. - k) / k;
+								base[1].node = el1.node;
 
-								base.global()[2].index = el2.index;
-								base.global()[2].val = (4. - k) / k;
-								base.global()[2].node = el2.node;
+								base[2].index = el2.index;
+								base[2].val = (4. - k) / k;
+								base[2].node = el2.node;
 
 								// if(is_interface){
 								// poly_face_to_data[face_id].local_indices.push_back(local_index);
@@ -726,24 +841,19 @@ namespace polyfem
 
 								for (std::size_t n = 0; n < other_indices.size(); ++n)
 								{
-									base.global()[3 + n].index = other_indices[n];
-									base.global()[3 + n].val = 4. / k;
-									base.global()[3 + n].node = mesh_nodes.node_position(other_indices[n]);
+									base[3 + n].index = other_indices[n];
+									base[3 + n].val = 4. / k;
+									base[3 + n].node = mesh_nodes.node_position(other_indices[n]);
 								}
-
-								const QuadraticBSpline3d spline(h_knots[x], v_knots[y], w_knots[z]);
-
-								b.bases[local_index].set_basis([spline](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { spline.interpolate(uv, val); });
-								b.bases[local_index].set_grad([spline](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { spline.derivative(uv, val); });
 							}
 						}
 					}
 				}
 			}
 
-			void create_q2_nodes(const Mesh3D &mesh, const int el_index, std::set<int> &vertex_id, std::set<int> &edge_id, std::set<int> &face_id, ElementBases &b, std::vector<LocalBoundary> &local_boundary, int &n_bases)
+			void create_q2_nodes(const Mesh3D &mesh, const int el_index, std::set<int> &vertex_id, std::set<int> &edge_id, std::set<int> &face_id, LocalDofMappings &b, std::vector<LocalBoundary> &local_boundary, int &n_bases)
 			{
-				b.bases.resize(27);
+				b.resize(27);
 
 				std::array<std::function<Navigation3D::Index(Navigation3D::Index)>, 6> to_face;
 				mesh.to_face_functions(to_face);
@@ -798,10 +908,7 @@ namespace polyfem
 
 					// init new Q2 nodes
 					if (current_vertex_node_id >= 0)
-						b.bases[loc_index].init(2, current_vertex_node_id, loc_index, current_vertex_node);
-
-					b.bases[loc_index].set_basis([loc_index](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_basis_value_3d(2, loc_index, uv, val); });
-					b.bases[loc_index].set_grad([loc_index](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_grad_basis_value_3d(2, loc_index, uv, val); });
+						b[loc_index].emplace_back(current_vertex_node_id, current_vertex_node, 1.0);
 				}
 
 				for (int j = 0; j < 12; ++j)
@@ -844,10 +951,7 @@ namespace polyfem
 
 					// init new Q2 nodes
 					if (current_edge_node_id >= 0)
-						b.bases[loc_index].init(2, current_edge_node_id, loc_index, current_edge_node);
-
-					b.bases[loc_index].set_basis([loc_index](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_basis_value_3d(2, loc_index, uv, val); });
-					b.bases[loc_index].set_grad([loc_index](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_grad_basis_value_3d(2, loc_index, uv, val); });
+						b[loc_index].emplace_back(current_edge_node_id, current_edge_node, 1.0);
 				}
 
 				for (int j = 0; j < 6; ++j)
@@ -883,16 +987,11 @@ namespace polyfem
 
 					// init new Q2 nodes
 					if (current_face_node_id >= 0)
-						b.bases[loc_index].init(2, current_face_node_id, loc_index, current_face_node);
-
-					b.bases[loc_index].set_basis([loc_index](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_basis_value_3d(2, loc_index, uv, val); });
-					b.bases[loc_index].set_grad([loc_index](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_grad_basis_value_3d(2, loc_index, uv, val); });
+						b[loc_index].emplace_back(current_face_node_id, current_face_node, 1.0);
 				}
 
 				// //central node always present
-				b.bases[26].init(2, n_bases++, 26, mesh.cell_barycenter(el_index));
-				b.bases[26].set_basis([](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_basis_value_3d(2, 26, uv, val); });
-				b.bases[26].set_grad([](const Eigen::MatrixXd &uv, Eigen::MatrixXd &val) { autogen::q_grad_basis_value_3d(2, 26, uv, val); });
+				b[26].emplace_back(n_bases++, mesh.cell_barycenter(el_index), 1.0);
 
 				if (!lb.empty())
 					local_boundary.emplace_back(lb);
@@ -921,12 +1020,10 @@ namespace polyfem
 					vec.push_back(data);
 			}
 
-			void assign_q2_weights(const Mesh3D &mesh, const int el_index, std::vector<ElementBases> &bases)
+			void assign_q2_weights(const Mesh3D &mesh, const int el_index, const assembler::ElementBases &bases, std::vector<LocalDofMappings> &element_dof_mappings)
 			{
-				// Eigen::MatrixXd eval_p;
-				std::vector<AssemblyValues> eval_p;
 				const Navigation3D::Index start_index = mesh.get_index_from_element(el_index);
-				ElementBases &b = bases[el_index];
+				auto &b = element_dof_mappings[el_index];
 
 				std::array<std::function<Navigation3D::Index(Navigation3D::Index)>, 6> to_face;
 				mesh.to_face_functions(to_face);
@@ -947,7 +1044,7 @@ namespace polyfem
 						for (int k = 0; k < 9; ++k)
 							param_p.row(k) = hex_loc_nodes.row(opposite_indices[k]);
 					}
-					const auto &other_bases = bases[opposite_element];
+					const auto &other_mappings = element_dof_mappings[opposite_element];
 
 					// const auto &indices     = LagrangeBasis3d::quadr_hex_face_local_nodes(mesh, index);
 					const auto &indices = LagrangeBasis3d::hex_face_local_nodes(false, 2, mesh, index);
@@ -955,38 +1052,38 @@ namespace polyfem
 					std::array<int, 9> sizes;
 
 					for (int l = 0; l < 9; ++l)
-						sizes[l] = b.bases[indices[l]].global().size();
+						sizes[l] = b[indices[l]].size();
 
-					other_bases.evaluate_bases(param_p, eval_p);
-					for (std::size_t i = 0; i < other_bases.bases.size(); ++i)
+					const Eigen::MatrixXd eval_p = evaluate_basis_values(bases, opposite_element, param_p);
+					for (int i = 0; i < other_mappings.size(); ++i)
 					{
-						const auto &other_b = other_bases.bases[i];
+						const auto &other_b = other_mappings[i];
 
-						if (other_b.global().empty())
+						if (other_b.empty())
 							continue;
 
 						// other_b.basis(param_p, eval_p);
-						assert(eval_p[i].val.size() == 9);
+						assert(eval_p.rows() == 9);
 
 						// basis i of element opposite element is zero on this elements
-						if (eval_p[i].val.cwiseAbs().maxCoeff() <= 1e-10)
+						if (eval_p.col(i).cwiseAbs().maxCoeff() <= 1e-10)
 							continue;
 
-						for (std::size_t k = 0; k < other_b.global().size(); ++k)
+						for (std::size_t k = 0; k < other_b.size(); ++k)
 						{
 							for (int l = 0; l < 9; ++l)
 							{
-								Local2Global glob = other_b.global()[k];
-								glob.val *= eval_p[i].val(l);
+								Local2Global glob = other_b[k];
+								glob.val *= eval_p(l, i);
 
-								insert_into_global(el_index, glob, b.bases[indices[l]].global(), sizes[l]);
+								insert_into_global(el_index, glob, b[indices[l]], sizes[l]);
 							}
 						}
 					}
 				}
 			}
 
-			void setup_data_for_polygons(const Mesh3D &mesh, const int el_index, const ElementBases &b, std::map<int, InterfaceData> &poly_face_to_data)
+			void setup_data_for_polygons(const Mesh3D &mesh, const int el_index, std::map<int, InterfaceData> &poly_face_to_data)
 			{
 				const Navigation3D::Index start_index = mesh.get_index_from_element(el_index);
 				std::array<std::function<Navigation3D::Index(Navigation3D::Index)>, 6> to_face;
@@ -1017,24 +1114,23 @@ namespace polyfem
 
 		int SplineBasis3d::build_bases(const Mesh3D &mesh,
 									   const std::string &assembler,
-									   const int quadrature_order, const int mass_quadrature_order, std::vector<ElementBases> &bases, std::vector<LocalBoundary> &local_boundary, std::map<int, InterfaceData> &poly_face_to_data)
+									   const int quadrature_order, const int mass_quadrature_order, assembler::ElementBases &bases, std::vector<LocalBoundary> &local_boundary, std::map<int, InterfaceData> &poly_face_to_data)
 		{
-			using std::max;
 			assert(mesh.is_volume());
 
 			MeshNodes mesh_nodes(mesh, true, true, 1, 1, 1);
 
 			const int n_els = mesh.n_elements();
-			bases.resize(n_els);
+			std::vector<LocalDofMappings> element_dof_mappings(n_els);
 			local_boundary.clear();
 
-			// bounday_nodes.clear();
-
-			// HexQuadrature hex_quadrature;
-
-			std::array<std::array<double, 4>, 3> h_knots;
-			std::array<std::array<double, 4>, 3> v_knots;
-			std::array<std::array<double, 4>, 3> w_knots;
+			for (int e = 0; e < n_els; ++e)
+			{
+				bases.element_desc.push_back(ElementDesc{});
+				auto &element_desc = bases.element_desc.back();
+				element_desc.has_parameterization = !mesh.is_polytope(e);
+				bases.legacy_local_nodes_from_primitive.push_back({});
+			}
 
 			for (int e = 0; e < n_els; ++e)
 			{
@@ -1045,22 +1141,17 @@ namespace polyfem
 
 				build_local_space(mesh, mesh_nodes, e, space, local_boundary, poly_face_to_data);
 
-				ElementBases &b = bases[e];
 				const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, 2, AssemblerUtils::BasisType::SPLINE, 3);
 				const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", 2, AssemblerUtils::BasisType::SPLINE, 3);
 
-				b.set_quadrature([real_order](Quadrature &quad) {
-					HexQuadrature hex_quadrature;
-					hex_quadrature.get_quadrature(real_order, quad);
-				});
-				b.set_mass_quadrature([real_mass_order](Quadrature &quad) {
-					HexQuadrature hex_quadrature;
-					hex_quadrature.get_quadrature(real_mass_order, quad);
-				});
-				// hex_quadrature.get_quadrature(quadrature_order, b.quadrature);
-				b.bases.resize(27);
+				auto &element_desc = bases.element_desc[e];
+				Quadrature quad;
+				HexQuadrature{}.get_quadrature(real_order, quad);
+				element_desc.quadrature_desc = bases.quadrature.append(quad);
+				HexQuadrature{}.get_quadrature(real_mass_order, quad);
+				element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
 
-				b.set_local_node_from_primitive_func([e](const int primitive_id, const Mesh &mesh) {
+				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
 					const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 
 					std::array<std::function<Navigation3D::Index(Navigation3D::Index)>, 6> to_face;
@@ -1095,13 +1186,29 @@ namespace polyfem
 						res(i) = face_to_index[lf][i];
 
 					return res;
-				});
+				};
+
+				std::array<std::array<double, 4>, 3> h_knots;
+				std::array<std::array<double, 4>, 3> v_knots;
+				std::array<std::array<double, 4>, 3> w_knots;
 
 				setup_knots_vectors(mesh_nodes, space, h_knots, v_knots, w_knots);
 				// print_local_space(space);
 
-				basis_for_regular_hex(mesh_nodes, space, h_knots, v_knots, w_knots, b);
-				basis_for_irregulard_hex(e, mesh, mesh_nodes, space, h_knots, v_knots, w_knots, b, poly_face_to_data);
+				auto &basis_desc = element_desc.basis_desc;
+				basis_desc.element_kind = ElementKind::Hex;
+				basis_desc.basis_family = BasisFamily::Unknown;
+				basis_desc.order = 2;
+				basis_desc.orderq = 2;
+				basis_desc.dim = 3;
+				basis_desc.basis_num = 27;
+				basis_desc.eval_callback_id = bases.basis.append_eval_callback(make_spline_eval_callback(h_knots, v_knots, w_knots));
+				basis_desc.is_bernstein = false;
+
+				auto &element_mapping = element_dof_mappings[e];
+				element_mapping.resize(27);
+				basis_for_regular_hex(mesh_nodes, space, element_mapping);
+				basis_for_irregulard_hex(e, mesh, mesh_nodes, space, element_mapping, poly_face_to_data);
 			}
 
 			int n_bases = mesh_nodes.n_nodes();
@@ -1115,22 +1222,27 @@ namespace polyfem
 				if (mesh.is_polytope(e) || mesh.is_spline_compatible(e))
 					continue;
 
-				ElementBases &b = bases[e];
-
 				const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, 2, AssemblerUtils::BasisType::CUBE_LAGRANGE, 3);
 				const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", 2, AssemblerUtils::BasisType::CUBE_LAGRANGE, 3);
 
-				// hex_quadrature.get_quadrature(quadrature_order, b.quadrature);
-				b.set_quadrature([real_order](Quadrature &quad) {
-					HexQuadrature hex_quadrature;
-					hex_quadrature.get_quadrature(real_order, quad);
-				});
-				b.set_mass_quadrature([real_mass_order](Quadrature &quad) {
-					HexQuadrature hex_quadrature;
-					hex_quadrature.get_quadrature(real_mass_order, quad);
-				});
+				auto &element_desc = bases.element_desc[e];
+				Quadrature quad;
+				HexQuadrature{}.get_quadrature(real_order, quad);
+				element_desc.quadrature_desc = bases.quadrature.append(quad);
+				HexQuadrature{}.get_quadrature(real_mass_order, quad);
+				element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
 
-				b.set_local_node_from_primitive_func([e](const int primitive_id, const Mesh &mesh) {
+				auto &basis_desc = element_desc.basis_desc;
+				basis_desc.element_kind = ElementKind::Hex;
+				basis_desc.basis_family = BasisFamily::Lagrange;
+				basis_desc.order = 2;
+				basis_desc.orderq = 2;
+				basis_desc.dim = 3;
+				basis_desc.basis_num = 1; // TODO
+				basis_desc.eval_callback_id = -1;
+				basis_desc.is_bernstein = false;
+
+				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
 					const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 					Navigation3D::Index index;
 
@@ -1150,9 +1262,9 @@ namespace polyfem
 						res(i) = indices[i];
 
 					return res;
-				});
+				};
 
-				create_q2_nodes(mesh, e, vertex_id, edge_id, face_id, b, local_boundary, n_bases);
+				create_q2_nodes(mesh, e, vertex_id, edge_id, face_id, element_dof_mappings[e], local_boundary, n_bases);
 			}
 
 			bool missing_bases = false;
@@ -1164,13 +1276,13 @@ namespace polyfem
 					if (mesh.is_polytope(e) || mesh.is_spline_compatible(e))
 						continue;
 
-					auto &b = bases[e];
-					if (b.is_complete())
+					auto &b = element_dof_mappings[e];
+					if (is_complete(b))
 						continue;
 
-					assign_q2_weights(mesh, e, bases);
+					assign_q2_weights(mesh, e, bases, element_dof_mappings);
 
-					missing_bases = missing_bases || b.is_complete();
+					missing_bases = missing_bases || is_complete(b);
 				}
 			} while (missing_bases);
 
@@ -1179,27 +1291,8 @@ namespace polyfem
 				if (mesh.is_polytope(e) || mesh.is_spline_compatible(e))
 					continue;
 
-				const ElementBases &b = bases[e];
-				setup_data_for_polygons(mesh, e, b, poly_face_to_data);
+				setup_data_for_polygons(mesh, e, poly_face_to_data);
 			}
-
-			// for(int e = 0; e < n_els; ++e)
-			// {
-			//     if(!mesh.is_polytope(e))
-			//         continue;
-
-			//     for (int lf = 0; lf < mesh.n_cell_faces(e); ++lf)
-			//     {
-			//         auto index = mesh.get_index_from_element(e, lf, 0);
-			//         auto index2 = mesh.switch_element(index);
-			//         if (index2.element >= 0) {
-			//             auto &array = poly_face_to_data[index.face].local_indices;
-			//             auto &b = bases[index2.element];
-			//             array.resize(b.bases.size());
-			//             std::iota(array.begin(), array.end(), 0);
-			//         }
-			//     }
-			// }
 
 			for (auto &k : poly_face_to_data)
 			{
@@ -1209,116 +1302,22 @@ namespace polyfem
 				array.resize(std::distance(array.begin(), it));
 			}
 
+			for (int e = 0; e < n_els; ++e)
+			{
+				if (mesh.is_polytope(e))
+					continue;
+				append_dof_mappings(e, 3, element_dof_mappings[e], bases);
+			}
+
 			return n_bases;
 		}
 
-		void SplineBasis3d::fit_nodes(const Mesh3D &mesh, const int n_bases, std::vector<ElementBases> &gbases)
+		void SplineBasis3d::fit_nodes(const Mesh3D &mesh, const int n_bases, assembler::ElementBases &gbases)
 		{
+			(void)mesh;
+			(void)n_bases;
+			(void)gbases;
 			assert(false);
-			// const int dim = 3;
-			// const int n_constraints =  27;
-			// const int n_elements = mesh.n_elements();
-
-			// std::vector< Eigen::Triplet<double> > entries, entries_t;
-
-			// MeshNodes nodes(mesh, true, true, 1, 1, 1);
-			// // Eigen::MatrixXd tmp;
-			// std::vector<AssemblyValues> tmp_val;
-
-			// Eigen::MatrixXd node_rhs(n_constraints*n_elements, dim);
-			// Eigen::MatrixXd samples(n_constraints, dim);
-
-			// for(int i = 0; i < n_constraints; ++i)
-			//     samples.row(i) = LagrangeBasis3d::quadr_hex_local_node_coordinates(i);
-
-			// for(int i = 0; i < n_elements; ++i)
-			// {
-			//     auto &base = gbases[i];
-
-			//     if(!mesh.is_cube(i))
-			//         continue;
-
-			//     auto global_ids = LagrangeBasis3d::quadr_hex_local_to_global(mesh, i);
-			//     assert(global_ids.size() == n_constraints);
-
-			//     for(int j = 0; j < n_constraints; ++j)
-			//     {
-			//         auto n_id = nodes.node_id_from_primitive(global_ids[j]);
-			//         auto n = nodes.node_position(n_id);
-			//         for(int d = 0; d < dim; ++d)
-			//             node_rhs(n_constraints*i + j, d) = n(d);
-			//     }
-
-			//     base.evaluate_bases(samples, tmp_val);
-			//     const auto &lbs = base.bases;
-
-			//     const int n_local_bases = int(lbs.size());
-			//     for(int j = 0; j < n_local_bases; ++j)
-			//     {
-			//         const Basis &b = lbs[j];
-			//         const auto &tmp = tmp_val[j].val;
-
-			//         for(std::size_t ii = 0; ii < b.global().size(); ++ii)
-			//         {
-			//             for (long k = 0; k < tmp.size(); ++k)
-			//             {
-			//                 entries.emplace_back(n_constraints*i + k, b.global()[ii].index, tmp(k)*b.global()[ii].val);
-			//                 entries_t.emplace_back(b.global()[ii].index, n_constraints*i + k, tmp(k)*b.global()[ii].val);
-			//             }
-			//         }
-			//     }
-			// }
-
-			// Eigen::MatrixXd new_nodes(n_bases, dim);
-			// {
-			//     StiffnessMatrix mat(n_constraints*n_elements, n_bases);
-			//     StiffnessMatrix mat_t(n_bases, n_constraints*n_elements);
-
-			//     mat.setFromTriplets(entries.begin(), entries.end());
-			//     mat_t.setFromTriplets(entries_t.begin(), entries_t.end());
-
-			//     StiffnessMatrix A = mat_t * mat;
-			//     Eigen::MatrixXd b = mat_t * node_rhs;
-
-			//     json params = {
-			//         {"mtype", -2}, // matrix type for Pardiso (2 = SPD)
-			//         // {"max_iter", 0}, // for iterative solvers
-			//         // {"tolerance", 1e-9}, // for iterative solvers
-			//     };
-			//     auto solver = LinearSolver::create("", "");
-			//     solver->setParameters(params);
-			//     solver->analyzePattern(A);
-			//     solver->factorize(A);
-
-			//     for(int d = 0; d < dim; ++d)
-			//         solver->solve(b.col(d), new_nodes.col(d));
-			// }
-
-			// for(int i = 0; i < n_elements; ++i)
-			// {
-			//     auto &base = gbases[i];
-
-			//     if(!mesh.is_cube(i))
-			//         continue;
-
-			//     auto &lbs = base.bases;
-			//     const int n_local_bases = int(lbs.size());
-			//     for(int j = 0; j < n_local_bases; ++j)
-			//     {
-			//         Basis &b = lbs[j];
-
-			//         for(std::size_t ii = 0; ii < b.global().size(); ++ii)
-			//         {
-			//             // if(nodes.is_primitive_boundary(b.global()[ii].index))
-			//                 // continue;
-
-			//             for(int d = 0; d < dim; ++d)
-			//             {
-			//                 b.global()[ii].node(d) = new_nodes(b.global()[ii].index, d);
-			//             }
-			//         }
-			//     }
-			// }
 		}
 	} // namespace basis
 } // namespace polyfem
