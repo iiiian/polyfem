@@ -26,19 +26,19 @@ namespace polyfem::assembler
 		Span<const double> weights;
 		Span<const double> node_positions;
 
-		Span<const int> get_node_ids(int element_id, int basis_id) const
+		Span<const int> get_node_ids(int mapping_id) const
 		{
-			auto &desc = mapping_desc[element_id];
+			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(node_ids, desc.id_and_weight_range);
 		}
-		Span<const double> get_weights(int element_id, int basis_id) const
+		Span<const double> get_weights(int mapping_id) const
 		{
-			auto &desc = mapping_desc[element_id];
+			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(weights, desc.id_and_weight_range);
 		}
-		Span<const double> get_positions(int element_id, int basis_id) const
+		Span<const double> get_positions(int mapping_id) const
 		{
-			auto &desc = mapping_desc[element_id];
+			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(node_positions, desc.node_position_range);
 		}
 	};

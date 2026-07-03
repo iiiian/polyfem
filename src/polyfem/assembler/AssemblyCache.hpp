@@ -1,12 +1,15 @@
 #pragma once
 
-#include <polyfem/basis/ElementBases.hpp>
+#include <polyfem/utils/Range.hpp>
+#include <polyfem/utils/Span.hpp>
+#include <polyfem/assembler/ElementBases.hpp>
 
 #include <vector>
 
 #ifdef POLYFEM_WITH_CUDA
 #include <polyfem/utils/CUDAExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
+#include <polyfem/utils/CudaBoth.hpp>
 #endif
 
 namespace polyfem::assembler
@@ -117,12 +120,9 @@ namespace polyfem::assembler
 		Span<const double> weighted_measure;
 	};
 
-	/// Storage for basis evaluation, physical position, and geometry mapping.
-	/// See AssemblyCacheView for data layout.
-	struct AssemblyCache
+	// Temp storage required to compute assembly cache.
+	struct AssemblyTempStorage
 	{
-		std::vector<AssemblyCacheDesc> desc;
-
 		std::vector<double> basis_values;
 		std::vector<double> basis_grad_x;
 		std::vector<double> basis_grad_y;
@@ -130,85 +130,71 @@ namespace polyfem::assembler
 		std::vector<double> basis_grad_phy_x;
 		std::vector<double> basis_grad_phy_y;
 		std::vector<double> basis_grad_phy_z;
-
+		std::vector<double> gbasis_values;
+		std::vector<double> gbasis_grad_x;
+		std::vector<double> gbasis_grad_y;
+		std::vector<double> gbasis_grad_z;
 		std::vector<double> physical_x;
 		std::vector<double> physical_y;
 		std::vector<double> physical_z;
-
 		std::vector<double> det_J;
 		std::vector<double> J_inverse_transpose;
 		std::vector<double> weighted_measure;
 
+		void resize(int dim, int basis_num, int geom_basis_num, int quad_num);
+	};
+
+	/// Storage for basis evaluation, physical position, and geometry mapping.
+	/// See AssemblyCacheView for data layout.
+	class AssemblyCache
+	{
+	private:
+		std::vector<AssemblyCacheDesc> desc_;
+
+		std::vector<double> basis_values_;
+		std::vector<double> basis_grad_x_;
+		std::vector<double> basis_grad_y_;
+		std::vector<double> basis_grad_z_;
+		std::vector<double> basis_grad_phy_x_;
+		std::vector<double> basis_grad_phy_y_;
+		std::vector<double> basis_grad_phy_z_;
+
+		std::vector<double> physical_x_;
+		std::vector<double> physical_y_;
+		std::vector<double> physical_z_;
+
+		std::vector<double> det_J_;
+		std::vector<double> J_inverse_transpose_;
+		std::vector<double> weighted_measure_;
+
 #ifdef POLYFEM_WITH_CUDA
 		bool need_host_device_sync_ = true;
 
-		DBuf<AssemblyCacheDesc> d_desc_;
-		DBuf<double> d_basis_values_;
-		DBuf<double> d_basis_grad_x_;
-		DBuf<double> d_basis_grad_y_;
-		DBuf<double> d_basis_grad_z_;
-		DBuf<double> d_basis_grad_phy_x_;
-		DBuf<double> d_basis_grad_phy_y_;
-		DBuf<double> d_basis_grad_phy_z_;
-		DBuf<double> d_physical_x_;
-		DBuf<double> d_physical_y_;
-		DBuf<double> d_physical_z_;
-		DBuf<double> d_det_J_;
-		DBuf<double> d_J_inverse_transpose_;
-		DBuf<double> d_weighted_measure_;
+		DeviceBuf<AssemblyCacheDesc> d_desc_;
+		DeviceBuf<double> d_basis_values_;
+		DeviceBuf<double> d_basis_grad_x_;
+		DeviceBuf<double> d_basis_grad_y_;
+		DeviceBuf<double> d_basis_grad_z_;
+		DeviceBuf<double> d_basis_grad_phy_x_;
+		DeviceBuf<double> d_basis_grad_phy_y_;
+		DeviceBuf<double> d_basis_grad_phy_z_;
+		DeviceBuf<double> d_physical_x_;
+		DeviceBuf<double> d_physical_y_;
+		DeviceBuf<double> d_physical_z_;
+		DeviceBuf<double> d_det_J_;
+		DeviceBuf<double> d_J_inverse_transpose_;
+		DeviceBuf<double> d_weighted_measure_;
 #endif
+
+	public:
+		int append(bool is_mass, const AssemblyTempStorage &temp);
 
 		AssemblyCacheView view() const;
 
-		// Resize all storage to zero without actually freeing the memory.
-		void clear();
+#ifdef POLYFEM_WITH_CUDA
+		AssemblyCacheView device_view(CudaExecutionPolicy policy = {});
+		void clear_device_storage();
+#endif
 	};
-
-	/// Temporary storage for intermediate value during geometry mapping evaluation.
-	struct GeomMappingScratch
-	{
-		std::vector<double> basis_values;
-		std::vector<double> basis_grad_x;
-		std::vector<double> basis_grad_y;
-		std::vector<double> basis_grad_z;
-	};
-
-	/// Append cached assembly data for one element.
-	///
-	/// @param bases Solution basis data.
-	/// @param geom_bases Geometry basis data.
-	/// @param element_id Element id.
-	/// @param is_mass True for mass matrix assembler.
-	/// @param is_isoparametric True if geometry and solution bases are the same.
-	/// @param need_basis_values If true, eval solution basis values.
-	/// @param need_basis_gradients If ture, eval solution basis gradients.
-	/// @param geom_mapping_scratch Reusable temporary storage.
-	/// @param cache Assembly cache to append into.
-	void compute_assembly_cache_single(
-		const basis::ng::ElementBasesView &bases,
-		const basis::ng::ElementBasesView &geom_bases,
-		int element_id,
-		bool is_mass,
-		bool is_isoparametric,
-		bool need_basis_values,
-		bool need_basis_gradients,
-		GeomMappingScratch &geom_mapping_scratch,
-		AssemblyCache &cache);
-
-	/// Build assembly cache for all elements.
-	///
-	/// @param bases Solution basis data.
-	/// @param geom_bases Geometry basis data.
-	/// @param is_mass True for mass matrix assembler.
-	/// @param is_isoparametric True if geometry and solution bases are the same.
-	/// @param need_basis_values If true, eval solution basis values.
-	/// @param need_basis_gradients If ture, eval solution basis gradients.
-	AssemblyCache compute_assembly_cache_batched(
-		const basis::ng::ElementBasesView &bases,
-		const basis::ng::ElementBasesView &geom_bases,
-		bool is_mass,
-		bool is_isoparametric,
-		bool need_basis_values,
-		bool need_basis_gradients);
 
 } // namespace polyfem::assembler

@@ -4,8 +4,6 @@ set(SOURCES
 	AssemblerData.hpp
 	AssemblerUtils.cpp
 	AssemblerUtils.hpp
-	AssemblyValsCache.cpp
-	AssemblyValsCache.hpp
 	AssemblyValues.hpp
 	ActiveFiber.cpp
 	ActiveFiber.hpp
@@ -13,8 +11,8 @@ set(SOURCES
 	Bilaplacian.hpp
   AssemblyCache.cpp
 	AssemblyCache.hpp
-	ElementAssemblyValues.cpp
-	ElementAssemblyValues.hpp
+	ComputeAssemblyCache.cpp
+	ComputeAssemblyCache.hpp
 	GenericElastic.cpp
 	GenericElastic.hpp
 	GenericFiber.cpp
@@ -90,6 +88,10 @@ set(SOURCES
   ElementBases.hpp
   ElementBases.cpp
 )
+
+if(POLYFEM_WITH_CUDA)
+  set_source_files_properties(AssemblyCache.cpp PROPERTIES LANGUAGE CUDA)
+endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})
 target_sources(polyfem PRIVATE ${SOURCES})
