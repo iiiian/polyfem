@@ -1,5 +1,6 @@
 #pragma once
 
+#include <polyfem/basis/Local2Global.hpp>
 #include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/Range.hpp>
 
@@ -41,6 +42,8 @@ namespace polyfem::assembler
 			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(node_positions, desc.node_position_range);
 		}
+
+		std::vector<basis::Local2Global> get_local_to_global(int mapping_id, int dim) const;
 	};
 
 	class DofMappingStore

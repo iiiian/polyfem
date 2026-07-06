@@ -22,10 +22,10 @@ namespace polyfem::assembler
 	{
 		return ElementBasesView{
 			element_desc,
-			quadrature.view(),
-			mass_quadrature.view(),
-			basis.view(),
-			dof_mapping.view(),
+			quadrature_store.view(),
+			mass_quadrature_store.view(),
+			basis_store.view(),
+			dof_mapping_store.view(),
 			legacy_local_nodes_from_primitive};
 	}
 
@@ -43,10 +43,10 @@ namespace polyfem::assembler
 
 		return ElementBasesView{
 			*d_element_desc_,
-			quadrature.device_view(p),
-			mass_quadrature.device_view(p),
-			basis.device_view(p),
-			dof_mapping.device_view(p),
+			quadrature_store.device_view(p),
+			mass_quadrature_store.device_view(p),
+			basis_store.device_view(p),
+			dof_mapping_store.device_view(p),
 			{}};
 	}
 
@@ -54,10 +54,10 @@ namespace polyfem::assembler
 	{
 		need_host_device_sync_ = true;
 		d_element_desc_ = {};
-		quadrature.clear_device_storage();
-		mass_quadrature.clear_device_storage();
-		basis.clear_device_storage();
-		dof_mapping.clear_device_storage();
+		quadrature_store.clear_device_storage();
+		mass_quadrature_store.clear_device_storage();
+		basis_store.clear_device_storage();
+		dof_mapping_store.clear_device_storage();
 	}
 #endif
 

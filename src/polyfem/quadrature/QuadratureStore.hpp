@@ -51,6 +51,8 @@ namespace polyfem::quadrature
 		{
 			return slice_by_range(w, desc.w_range);
 		}
+
+		Quadrature get_quadrature(const QuadratureDesc &desc) const;
 	};
 
 	class QuadratureStore
@@ -73,7 +75,7 @@ namespace polyfem::quadrature
 		QuadratureStoreView view() const;
 
 		/// Append quadrature to the store. Require non-empty quadrature.
-		QuadratureDesc append(const quadrature::Quadrature &quad);
+		QuadratureDesc append(const Quadrature &quad);
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.

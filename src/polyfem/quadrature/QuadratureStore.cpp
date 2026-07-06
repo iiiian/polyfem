@@ -6,6 +6,7 @@
 #include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/Range.hpp>
 
+#include <cassert>
 #include <vector>
 
 #ifdef POLYFEM_WITH_CUDA
@@ -21,8 +22,42 @@ namespace polyfem::quadrature
 		return QuadratureStoreView{x_, y_, z_, w_};
 	}
 
+	Quadrature QuadratureStoreView::get_quadrature(const QuadratureDesc &desc) const
+	{
+		const auto xs = get_x(desc);
+		const auto ys = get_y(desc);
+		const auto zs = get_z(desc);
+		const auto ws = get_w(desc);
+		const int n_points = ws.size();
+
+		assert(desc.dim >= 1 && desc.dim <= 3);
+		assert(xs.size() == n_points);
+		if (desc.dim > 1)
+			assert(ys.size() == n_points);
+		else
+			assert(ys.empty());
+		if (desc.dim > 2)
+			assert(zs.size() == n_points);
+		else
+			assert(zs.empty());
+
+		Quadrature quad;
+		quad.points.resize(n_points, desc.dim);
+		quad.weights.resize(n_points);
+		for (int i = 0; i < n_points; ++i)
+		{
+			quad.points(i, 0) = xs[i];
+			if (desc.dim > 1)
+				quad.points(i, 1) = ys[i];
+			if (desc.dim > 2)
+				quad.points(i, 2) = zs[i];
+			quad.weights(i) = ws[i];
+		}
+		return quad;
+	}
+
 	/// @brief Append quadrature to the store. Require non-empty quadrature.
-	QuadratureDesc QuadratureStore::append(const quadrature::Quadrature &quad)
+	QuadratureDesc QuadratureStore::append(const Quadrature &quad)
 	{
 		assert(quad.size() != 0);
 

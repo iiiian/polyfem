@@ -2,6 +2,7 @@
 
 #include <polyfem/utils/Range.hpp>
 #include <polyfem/utils/Span.hpp>
+#include <polyfem/utils/CudaBoth.hpp>
 #include <polyfem/assembler/ElementBases.hpp>
 
 #include <vector>
@@ -9,7 +10,6 @@
 #ifdef POLYFEM_WITH_CUDA
 #include <polyfem/utils/CUDAExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
-#include <polyfem/utils/CudaBoth.hpp>
 #endif
 
 namespace polyfem::assembler
@@ -118,6 +118,99 @@ namespace polyfem::assembler
 		/// Layout: [ element 0 cache ] [ element 1 cache ] ...
 		/// Layout inside each element: [ w(q0)det(J(q0)) w(q1)det(J(q1)) ... ].
 		Span<const double> weighted_measure;
+
+		POLYFEM_BOTH double get_basis_value(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_val_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_values[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_x(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_grad_x_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_grad_x[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_y(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_grad_y_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_grad_y[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_z(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_grad_z_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_grad_z[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_phy_x(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_grad_phy_x_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_grad_phy_x[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_phy_y(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_grad_phy_y_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_grad_phy_y[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_phy_z(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			int idx = desc.basis_grad_phy_z_range.offset + local_basis_id * quad_num + quad_id;
+			return basis_grad_phy_z[idx];
+		}
+
+		POLYFEM_BOTH double get_physical_x(int element_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			return physical_x[desc.physical_x_range.offset + quad_id];
+		}
+
+		POLYFEM_BOTH double get_physical_y(int element_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			return physical_y[desc.physical_y_range.offset + quad_id];
+		}
+
+		POLYFEM_BOTH double get_physical_z(int element_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			return physical_z[desc.physical_z_range.offset + quad_id];
+		}
+
+		POLYFEM_BOTH double get_det_J(int element_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			return det_J[desc.det_J_range.offset + quad_id];
+		}
+
+		POLYFEM_BOTH double get_weighted_measure(int element_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			return weighted_measure[desc.weighted_measure_range.offset + quad_id];
+		}
+
+		POLYFEM_BOTH Span<const double> get_J_inverse_transpose(int element_id, int quad_id, int dim) const
+		{
+			const auto &desc = this->desc[element_id];
+			int idx = desc.J_inverse_transpose_range.offset + quad_id * dim * dim;
+			return Span<const double>(J_inverse_transpose.data() + idx, dim * dim);
+		}
 	};
 
 	// Temp storage required to compute assembly cache.
@@ -186,8 +279,11 @@ namespace polyfem::assembler
 		DeviceBuf<double> d_weighted_measure_;
 #endif
 
+		AssemblyCacheDesc insert(bool is_mass, const AssemblyTempStorage &temp);
+
 	public:
 		int append(bool is_mass, const AssemblyTempStorage &temp);
+		void update(int element_id, bool is_mass, const AssemblyTempStorage &temp);
 
 		AssemblyCacheView view() const;
 

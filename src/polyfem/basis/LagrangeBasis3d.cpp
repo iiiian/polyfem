@@ -2,7 +2,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include "LagrangeBasis3d.hpp"
 
-#include <polyfem/basis/Basis.hpp>
+#include <polyfem/basis/Local2Global.hpp>
 #include <polyfem/basis/EvalBasis.hpp>
 #include <polyfem/mesh/MeshNodes.hpp>
 #include <polyfem/quadrature/TetQuadrature.hpp>
@@ -1276,7 +1276,7 @@ namespace
 		auto node_pos_z = Span<const double>(node_position.col(2).data(), node_num);
 		basis_values(
 			basis_desc,
-			bases.basis.view(),
+			bases.basis_store.view(),
 			node_pos_x,
 			node_pos_y,
 			node_pos_z,
@@ -2519,9 +2519,9 @@ int LagrangeBasis3d::build_bases(
 
 			Quadrature quad;
 			HexQuadrature{}.get_quadrature(real_order, quad);
-			element_desc.quadrature_desc = bases.quadrature.append(quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 			HexQuadrature{}.get_quadrature(real_mass_order, quad);
-			element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 			auto &basis_desc = element_desc.basis_desc;
 			basis_desc.element_kind = ElementKind::Hex;
@@ -2555,9 +2555,9 @@ int LagrangeBasis3d::build_bases(
 
 			Quadrature quad;
 			TetQuadrature{use_corner_quadrature}.get_quadrature(real_order, quad);
-			element_desc.quadrature_desc = bases.quadrature.append(quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 			TetQuadrature{use_corner_quadrature}.get_quadrature(real_mass_order, quad);
-			element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 			const bool rational = is_geom_bases && mesh.is_rational() && !mesh.cell_weights(e).empty();
 			assert(!rational);
@@ -2597,9 +2597,9 @@ int LagrangeBasis3d::build_bases(
 
 			Quadrature quad;
 			PrismQuadrature{}.get_quadrature(orderp, orderq, quad);
-			element_desc.quadrature_desc = bases.quadrature.append(quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 			PrismQuadrature{}.get_quadrature(mass_orderp, mass_orderq, quad);
-			element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 			auto &basis_desc = element_desc.basis_desc;
 			basis_desc.element_kind = ElementKind::Prism;
@@ -2633,9 +2633,9 @@ int LagrangeBasis3d::build_bases(
 
 			Quadrature quad;
 			PyramidQuadrature{}.get_quadrature(orderp, quad);
-			element_desc.quadrature_desc = bases.quadrature.append(quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 			PyramidQuadrature{}.get_quadrature(mass_orderp, quad);
-			element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 			auto &basis_desc = element_desc.basis_desc;
 			basis_desc.element_kind = ElementKind::Pyramid;
@@ -3360,7 +3360,7 @@ int LagrangeBasis3d::build_bases(
 				}
 			}
 
-			const int mapping_id = bases.dof_mapping.append(node_ids, weights, node_positions);
+			const int mapping_id = bases.dof_mapping_store.append(node_ids, weights, node_positions);
 			if (j == 0)
 			{
 				first_mapping_id = mapping_id;

@@ -11,6 +11,7 @@ set(SOURCES
 	LagrangeBasis2d.hpp
 	LagrangeBasis3d.cpp
 	LagrangeBasis3d.hpp
+	Local2Global.hpp
 	function/QuadraticBSpline.cpp
 	function/QuadraticBSpline.hpp
 	function/QuadraticBSpline2d.cpp

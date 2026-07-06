@@ -786,9 +786,9 @@ int LagrangeBasis2d::build_bases(
 
 			Quadrature quad;
 			QuadQuadrature{}.get_quadrature(real_order, quad);
-			element_desc.quadrature_desc = bases.quadrature.append(quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 			QuadQuadrature{}.get_quadrature(real_mass_order, quad);
-			element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 			// Build basis.
 			auto &basis_desc = element_desc.basis_desc;
@@ -825,9 +825,9 @@ int LagrangeBasis2d::build_bases(
 
 			Quadrature quad;
 			TriQuadrature{use_corner_quadrature}.get_quadrature(real_order, quad);
-			element_desc.quadrature_desc = bases.quadrature.append(quad);
+			element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 			TriQuadrature{use_corner_quadrature}.get_quadrature(real_mass_order, quad);
-			element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+			element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 			// Build basis.
 			bool rational = is_geom_bases && mesh.is_rational() && !mesh.cell_weights(e).empty();
@@ -847,7 +847,7 @@ int LagrangeBasis2d::build_bases(
 				// We only support order 2. For 2d simplex order 2 equals 6 basis.
 				const auto &cell_weights = mesh.cell_weights(e);
 				assert(cell_weights.size() == 6);
-				basis_desc.rational_weight_range = bases.basis.append_rational_weights(cell_weights);
+				basis_desc.rational_weight_range = bases.basis_store.append_rational_weights(cell_weights);
 			}
 
 			// Build legacy callbacks.
@@ -1052,7 +1052,7 @@ int LagrangeBasis2d::build_bases(
 								BasisDesc basis_desc = bases.element_desc[opposite_element].basis_desc;
 								basis_values(
 									basis_desc,
-									bases.basis.view(),
+									bases.basis_store.view(),
 									node_pos_x,
 									node_pos_y,
 									{},
@@ -1162,7 +1162,7 @@ int LagrangeBasis2d::build_bases(
 								BasisDesc basis_desc = bases.element_desc[other_face].basis_desc;
 								basis_values(
 									basis_desc,
-									bases.basis.view(),
+									bases.basis_store.view(),
 									node_pos_x,
 									node_pos_y,
 									{},
@@ -1220,7 +1220,7 @@ int LagrangeBasis2d::build_bases(
 				}
 			}
 
-			int mapping_id = bases.dof_mapping.append(node_ids, weights, node_positions);
+			int mapping_id = bases.dof_mapping_store.append(node_ids, weights, node_positions);
 			if (j == 0)
 			{
 				first_mapping_id = mapping_id;

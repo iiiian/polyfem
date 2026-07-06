@@ -45,7 +45,7 @@ namespace polyfem::assembler
 		}
 	}
 
-	int AssemblyCache::append(bool is_mass, const AssemblyTempStorage &temp)
+	AssemblyCacheDesc AssemblyCache::insert(bool is_mass, const AssemblyTempStorage &temp)
 	{
 #ifdef POLYFEM_WITH_CUDA
 		need_host_device_sync_ = true;
@@ -75,8 +75,22 @@ namespace polyfem::assembler
 		append_and_set_range(temp.J_inverse_transpose, J_inverse_transpose_, new_desc.J_inverse_transpose_range);
 		append_and_set_range(temp.weighted_measure, weighted_measure_, new_desc.weighted_measure_range);
 
+		return new_desc;
+	}
+
+	int AssemblyCache::append(bool is_mass, const AssemblyTempStorage &temp)
+	{
+		AssemblyCacheDesc new_desc = insert(is_mass, temp);
 		desc_.push_back(new_desc);
 		return desc_.size() - 1;
+	}
+
+	void AssemblyCache::update(int element_id, bool is_mass, const AssemblyTempStorage &temp)
+	{
+		assert(element_id >= 0 && element_id < desc_.size());
+
+		AssemblyCacheDesc new_desc = insert(is_mass, temp);
+		desc_[element_id] = new_desc;
 	}
 
 	AssemblyCacheView AssemblyCache::view() const

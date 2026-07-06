@@ -32,10 +32,10 @@ namespace polyfem::assembler
 	struct ElementBasesView
 	{
 		Span<const ElementDesc> element_desc;
-		quadrature::QuadratureStoreView quadrature;
-		quadrature::QuadratureStoreView mass_quadrature;
-		basis::BasisStoreView basis;
-		DofMappingStoreView dof_mapping;
+		quadrature::QuadratureStoreView quadrature_store;
+		quadrature::QuadratureStoreView mass_quadrature_store;
+		basis::BasisStoreView basis_store;
+		DofMappingStoreView dof_mapping_store;
 		[[deprecated]] Span<const LocalNodeFromPrimitiveFunc> legacy_local_nodes_from_primitive;
 	};
 
@@ -43,10 +43,10 @@ namespace polyfem::assembler
 	{
 	public:
 		std::vector<ElementDesc> element_desc;
-		quadrature::QuadratureStore quadrature;
-		quadrature::QuadratureStore mass_quadrature;
-		basis::BasisStore basis;
-		DofMappingStore dof_mapping;
+		quadrature::QuadratureStore quadrature_store;
+		quadrature::QuadratureStore mass_quadrature_store;
+		basis::BasisStore basis_store;
+		DofMappingStore dof_mapping_store;
 
 		[[deprecated]] std::vector<LocalNodeFromPrimitiveFunc> legacy_local_nodes_from_primitive;
 

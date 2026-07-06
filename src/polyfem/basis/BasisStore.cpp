@@ -1,4 +1,3 @@
-#include "polyfem/basis/Basis.hpp"
 #include "polyfem/basis/ElementBases.hpp"
 #include <polyfem/basis/BasisStore.hpp>
 

@@ -20,6 +20,27 @@ namespace polyfem::assembler
 		return DofMappingStoreView{mapping_desc_, node_ids_, weights_, node_positions_};
 	}
 
+	std::vector<basis::Local2Global> DofMappingStoreView::get_local_to_global(const int mapping_id, const int dim) const
+	{
+		assert(dim >= 1 && dim <= 3);
+		const auto ids = get_node_ids(mapping_id);
+		const auto ws = get_weights(mapping_id);
+		const auto positions = get_positions(mapping_id);
+		assert(ids.size() == ws.size());
+		assert(positions.size() == ids.size() * dim);
+
+		std::vector<basis::Local2Global> result;
+		result.reserve(ids.size());
+		for (int i = 0; i < ids.size(); ++i)
+		{
+			RowVectorNd node(dim);
+			for (int d = 0; d < dim; ++d)
+				node(d) = positions[dim * i + d];
+			result.emplace_back(ids[i], node, ws[i]);
+		}
+		return result;
+	}
+
 	int DofMappingStore::append(Span<const int> node_ids, Span<const double> weights, Span<const double> node_positions)
 	{
 		assert(node_ids.size() != 0 && node_ids.size() == weights.size());
