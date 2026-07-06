@@ -1,0 +1,144 @@
+#include <polyfem/utils/BlockCSRMatrix.hpp>
+
+#include <polyfem/utils/Span.hpp>
+#include <polyfem/utils/CudaBoth.hpp>
+
+#include <vector>
+#include <unordered_set>
+#include <cstdint>
+#include <cassert>
+#include <utility>
+#include <algorithm>
+
+#ifdef POLYFEM_WITH_CUDA
+#include <cuda/algorithm>
+#include <cuda/buffer>
+#endif
+
+namespace polyfem
+{
+
+	namespace
+	{
+
+		uint64_t pack(uint32_t row, uint32_t col)
+		{
+			return (static_cast<uint64_t>(row) << 32) | static_cast<uint64_t>(col);
+		}
+
+		std::pair<uint32_t, uint32_t> unpack(uint64_t key)
+		{
+			uint32_t row = static_cast<uint32_t>(key >> 32);
+			uint32_t col = static_cast<uint32_t>(key & 0xFFFFFFFF);
+			return {row, col};
+		}
+
+	} // namespace
+
+	void BSRSparsityPattern::insert(uint32_t row, uint32_t col)
+	{
+		assert(row >= 0 && row < rows);
+		assert(col >= 0 && col < cols);
+		non_zeros.insert(pack(row, col));
+	}
+
+	void BSRSparsityPattern::join(const BSRSparsityPattern &other)
+	{
+		assert(rows == other.rows);
+		assert(cols == other.cols);
+
+		block_dim = std::min(block_dim, other.block_dim);
+		non_zeros.insert(other.non_zeros.begin(), other.non_zeros.end());
+	}
+
+	BSRMatrix::BSRMatrix(const BSRSparsityPattern &sparsity)
+	{
+		auto &s = sparsity;
+		assert(s.rows >= 0 && s.rows % s.block_dim == 0);
+		assert(s.cols >= 0 && s.cols % s.block_dim == 0);
+		assert(s.rows == s.cols);
+		assert(s.block_dim >= 1 && s.block_dim <= 3);
+
+		rows_ = s.rows;
+		cols_ = s.cols;
+		block_dim_ = s.block_dim;
+
+		// Build sorted block row, col key.
+		std::vector<uint64_t> block_keys;
+		if (s.block_dim == 1)
+		{
+			block_keys.insert(block_keys.end(), s.non_zeros.begin(), s.non_zeros.end());
+		}
+		else
+		{
+			std::unordered_set<uint64_t> block_nnz;
+			for (uint64_t key : s.non_zeros)
+			{
+				auto [row, col] = unpack(key);
+				uint64_t new_key = pack(row / s.block_dim, col / s.block_dim);
+				block_nnz.insert(new_key);
+			}
+			block_keys.insert(block_keys.end(), block_nnz.begin(), block_nnz.end());
+		}
+		std::sort(block_keys.begin(), block_keys.end());
+
+		// Count non zeros per row.
+		uint32_t prev_row = -1;
+		uint32_t count = 0;
+		for (uint64_t key : block_keys)
+		{
+			auto [row, col] = unpack(key);
+			if (row != prev_row)
+			{
+				row_ptr_.push_back(count);
+				prev_row = row;
+			}
+			col_idx_.push_back(col);
+			++count;
+		}
+		row_ptr_.push_back(count);
+
+		value_size_ = block_dim_ * block_dim_ * count;
+	}
+
+	void BSRMatrix::clear_storage()
+	{
+		values_ = {};
+
+#ifdef POLYFEM_WITH_CUDA
+		need_host_device_sync_ = true;
+		d_row_ptr_ = {};
+		d_col_idx_ = {};
+		d_values_ = {};
+#endif
+	}
+
+	BSRMatrixView BSRMatrix::view()
+	{
+		if (values_.empty())
+			values_.resize(value_size_, 0.0);
+		return BSRMatrixView{rows_, cols_, block_dim_, row_ptr_, col_idx_, values_};
+	}
+
+#ifdef POLYFEM_WITH_CUDA
+	BSRMatrixView BSRMatrix::device_view(CudaExecutionPolicy policy)
+	{
+		auto &p = policy;
+		if (need_host_device_sync_)
+		{
+			d_row_ptr_ = cuda::make_buffer<int>(p.stream, p.mr, row_ptr_.size(), cuda::no_init);
+			d_col_idx_ = cuda::make_buffer<int>(p.stream, p.mr, col_idx_.size(), cuda::no_init);
+			d_values_ = cuda::make_buffer<double>(p.stream, p.mr, value_size_, 0.0);
+
+			cuda::copy_bytes(p.stream, row_ptr_, *d_row_ptr_);
+			cuda::copy_bytes(p.stream, col_idx_, *d_col_idx_);
+
+			need_host_device_sync_ = false;
+			p.stream.sync();
+		}
+		return BSRMatrixView{rows_, cols_, block_dim_, *d_row_ptr_, *d_col_idx_, *d_values_};
+	}
+
+#endif
+
+} // namespace polyfem

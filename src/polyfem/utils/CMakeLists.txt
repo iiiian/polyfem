@@ -1,6 +1,8 @@
 set(SOURCES
 	autodiff.h
 	AutodiffTypes.hpp
+	BSRToStiffnessMatrix.cpp
+	BSRToStiffnessMatrix.hpp
 	Bessel.hpp
 	BoundarySampler.cpp
 	BoundarySampler.hpp
@@ -63,6 +65,13 @@ set(SOURCES
   tcb_span.hpp
   Span.hpp
 )
+
+if(POLYFEM_WITH_CUDA)
+	list(APPEND SOURCES
+		BSRToStiffnessMatrix.cu
+		BSRToStiffnessMatrix.cuh
+	)
+endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})
 target_sources(polyfem PRIVATE ${SOURCES})
