@@ -13,6 +13,8 @@ set(SOURCES
 	AssemblyCache.hpp
 	ComputeAssemblyCache.cpp
 	ComputeAssemblyCache.hpp
+	ComputeSparsityPattern.cpp
+	ComputeSparsityPattern.hpp
 	GeometryMapping.cpp
 	GeometryMapping.hpp
 	GenericElastic.cpp

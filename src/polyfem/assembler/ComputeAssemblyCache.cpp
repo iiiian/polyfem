@@ -61,7 +61,7 @@ namespace polyfem::assembler
 
 		// Quadrature points and weights.
 		int quad_num = quad_desc.w_range.num;
-		auto &quad_store = is_mass ? bases.mass_quadrature : bases.quadrature;
+		auto &quad_store = is_mass ? bases.mass_quadrature_store : bases.quadrature_store;
 		auto quad_x = quad_store.get_x(quad_desc);
 		auto quad_y = quad_store.get_y(quad_desc);
 		auto quad_z = quad_store.get_z(quad_desc);
@@ -91,7 +91,7 @@ namespace polyfem::assembler
 		int basis_num = elem_desc.basis_desc.basis_num;
 		basis::basis_value_and_gradients(
 			elem_desc.basis_desc,
-			bases.basis,
+			bases.basis_store,
 			quad_x,
 			quad_y,
 			quad_z,

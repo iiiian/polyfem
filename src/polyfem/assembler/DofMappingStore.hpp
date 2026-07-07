@@ -9,6 +9,7 @@
 #ifdef POLYFEM_WITH_CUDA
 #include <polyfem/utils/CUDAExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
+#include <polyfem/utils/CudaBoth.hpp>
 #endif
 
 namespace polyfem::assembler
@@ -27,17 +28,17 @@ namespace polyfem::assembler
 		Span<const double> weights;
 		Span<const double> node_positions;
 
-		Span<const int> get_node_ids(int mapping_id) const
+		POLYFEM_BOTH Span<const int> get_node_ids(int mapping_id) const
 		{
 			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(node_ids, desc.id_and_weight_range);
 		}
-		Span<const double> get_weights(int mapping_id) const
+		POLYFEM_BOTH Span<const double> get_weights(int mapping_id) const
 		{
 			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(weights, desc.id_and_weight_range);
 		}
-		Span<const double> get_positions(int mapping_id) const
+		POLYFEM_BOTH Span<const double> get_positions(int mapping_id) const
 		{
 			auto &desc = mapping_desc[mapping_id];
 			return slice_by_range(node_positions, desc.node_position_range);

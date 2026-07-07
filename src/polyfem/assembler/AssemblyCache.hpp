@@ -151,6 +151,28 @@ namespace polyfem::assembler
 			return basis_grad_z[idx];
 		}
 
+		template <int dim>
+		POLYFEM_BOTH Eigen::Vector<double, dim> get_basis_grad(int element_id, int local_basis_id, int quad_id)
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			Eigen::Vector<double, dim> ret;
+
+			int idx = desc.basis_grad_x_range.offset + local_basis_id * quad_num + quad_id;
+			ret(0) = basis_grad_x[idx];
+			if constexpr (dim >= 1)
+			{
+				int idx = desc.basis_grad_y_range.offset + local_basis_id * quad_num + quad_id;
+				ret(1) = basis_grad_y[idx];
+			}
+			if constexpr (dim >= 2)
+			{
+				int idx = desc.basis_grad_z_range.offset + local_basis_id * quad_num + quad_id;
+				ret(2) = basis_grad_z[idx];
+			}
+			return ret;
+		}
+
 		POLYFEM_BOTH double get_basis_grad_phy_x(int element_id, int local_basis_id, int quad_id) const
 		{
 			const auto &desc = this->desc[element_id];
@@ -175,6 +197,28 @@ namespace polyfem::assembler
 			return basis_grad_phy_z[idx];
 		}
 
+		template <int dim>
+		POLYFEM_BOTH Eigen::Vector<double, dim> get_basis_grad_phy(int element_id, int local_basis_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			int quad_num = desc.det_J_range.num;
+			Eigen::Vector<double, dim> ret;
+
+			int idx = desc.basis_grad_phy_x_range.offset + local_basis_id * quad_num + quad_id;
+			ret(0) = basis_grad_phy_x[idx];
+			if constexpr (dim >= 1)
+			{
+				int idx = desc.basis_grad_phy_y_range.offset + local_basis_id * quad_num + quad_id;
+				ret(1) = basis_grad_phy_y[idx];
+			}
+			if constexpr (dim >= 2)
+			{
+				int idx = desc.basis_grad_phy_z_range.offset + local_basis_id * quad_num + quad_id;
+				ret(2) = basis_grad_phy_z[idx];
+			}
+			return ret;
+		}
+
 		POLYFEM_BOTH double get_physical_x(int element_id, int quad_id) const
 		{
 			const auto &desc = this->desc[element_id];
@@ -191,6 +235,27 @@ namespace polyfem::assembler
 		{
 			const auto &desc = this->desc[element_id];
 			return physical_z[desc.physical_z_range.offset + quad_id];
+		}
+
+		template <int dim>
+		POLYFEM_BOTH Eigen::Vector<double, dim> get_physical(int element_id, int quad_id) const
+		{
+			const auto &desc = this->desc[element_id];
+			Eigen::Vector<double, dim> ret;
+
+			int idx = desc.physical_x_range.offset + quad_id;
+			ret(0) = physical_x[idx];
+			if constexpr (dim >= 1)
+			{
+				int idx = desc.physical_y_range.offset + quad_id;
+				ret(1) = physical_y[idx];
+			}
+			if constexpr (dim >= 2)
+			{
+				int idx = desc.physical_z_range.offset + quad_id;
+				ret(2) = physical_z[idx];
+			}
+			return ret;
 		}
 
 		POLYFEM_BOTH double get_det_J(int element_id, int quad_id) const
