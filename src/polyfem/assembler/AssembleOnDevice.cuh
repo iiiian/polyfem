@@ -16,6 +16,7 @@
 #include <Eigen/Core>
 
 #include <cassert>
+#include <cstddef>
 #include <stdexcept>
 #include <vector>
 #include <exception>
@@ -30,56 +31,65 @@ namespace polyfem::assembler
 			return dim * (dim + 1) / 2;
 		}
 
-		POLYFEM_BOTH int index_upper_mat(int dim, int i, int j)
+		struct VectorAssemblyTask
 		{
-			if (i > j)
-			{
-				cuda::std::swap(i, j);
-			}
-			return i * dim - (i * (i + 1) / 2) + j;
-		}
+			int elem_id;
+			int local_i;
+		};
 
-		POLYFEM_BOTH cuda::std::pair<int, int> inverse_index_upper_mat(int dim, int offset)
+		struct MatrixAssemblyTask
 		{
-			for (int i = 0; i < dim; ++i)
+			int elem_id;
+			int local_i;
+			int local_j;
+		};
+
+		inline std::vector<VectorAssemblyTask> build_vector_tasks(const ElementBases &bases)
+		{
+			int task_num = 0;
+			for (const ElementDesc &elem_desc : bases.element_desc)
 			{
-				for (int j = 0; j < dim; ++j)
+				task_num += elem_desc.basis_desc.basis_num;
+			}
+
+			std::vector<VectorAssemblyTask> tasks;
+			tasks.reserve(task_num);
+			for (int elem_id = 0; elem_id < bases.element_desc.size(); ++elem_id)
+			{
+				int basis_num = bases.element_desc[elem_id].basis_desc.basis_num;
+				for (int local_i = 0; local_i < basis_num; ++local_i)
 				{
-					if (index_upper_mat(dim, i, j) == offset)
-						return {i, j};
+					tasks.push_back({elem_id, local_i});
 				}
 			}
-			return {-1, -1};
+
+			return tasks;
 		}
 
-		// template <int VALUE_DIM>
-		// __device__ void scatter_hess_psd_tmp(int local_i, int local_j, int basis_num, Span<const double> local_mat, Span<double> mat_out)
-		// {
-		// 	using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
-		// 	auto mat = Eigen::Map<const Mat>(local_mat.data());
-		//
-		// 	if (local_i != local_j)
-		// 	{
-		// 		for (int i = 0; i < VALUE_DIM; ++i)
-		// 		{
-		// 			for (int j = 0; j < VALUE_DIM; ++j)
-		// 			{
-		// 				int psd_i = VALUE_DIM * local_i + i;
-		// 				int psd_j = VALUE_DIM * local_j + j;
-		// 				mat_out[index_upper_mat(basis_num * VALUE_DIM, psd_i, psd_j)] = mat(i, j);
-		// 			}
-		// 		}
-		// 	}
-		// 	for (int i = 0; i < VALUE_DIM; ++i)
-		// 	{
-		// 		for (int j = i; j < VALUE_DIM; ++j)
-		// 		{
-		// 			int psd_i = VALUE_DIM * local_i + i;
-		// 			int psd_j = VALUE_DIM * local_j + j;
-		// 			mat_out[index_upper_mat(basis_num * VALUE_DIM, psd_i, psd_j)] = mat(i, j);
-		// 		}
-		// 	}
-		// }
+		inline std::vector<MatrixAssemblyTask> build_matrix_tasks(const ElementBases &bases)
+		{
+			int task_num = 0;
+			for (const ElementDesc &elem_desc : bases.element_desc)
+			{
+				task_num += upper_mat_size(elem_desc.basis_desc.basis_num);
+			}
+
+			std::vector<MatrixAssemblyTask> tasks;
+			tasks.reserve(task_num);
+			for (int elem_id = 0; elem_id < bases.element_desc.size(); ++elem_id)
+			{
+				int basis_num = bases.element_desc[elem_id].basis_desc.basis_num;
+				for (int local_i = 0; local_i < basis_num; ++local_i)
+				{
+					for (int local_j = local_i; local_j < basis_num; ++local_j)
+					{
+						tasks.push_back({elem_id, local_i, local_j});
+					}
+				}
+			}
+
+			return tasks;
+		}
 
 		template <int VALUE_DIM>
 		__device__ void scatter_mat_ij(
@@ -149,78 +159,40 @@ namespace polyfem::assembler
 			}
 		}
 
-		// __device__ void scatter_mat_full(int elem_id, int basis_num, int value_dim, ElementBasesView bases, Span<const double> psd_mat, BSRMatrixMutableView mat_out)
-		// {
-		// 	auto &elem_desc = bases.element_desc[elem_id];
-		// 	auto &mappings = bases.dof_mapping_store;
-		//
-		// 	for (int local_i = 0; local_i < basis_num; ++local_i)
-		// 	{
-		// 		for (int local_j = 0; local_j < basis_num; ++local_j)
-		// 		{
-		// 			int row_mapping_id = elem_desc.dof_mapping_range.offset + local_i;
-		// 			int col_mapping_id = elem_desc.dof_mapping_range.offset + local_j;
-		//
-		// 			auto row_node_ids = mappings.get_node_ids(row_mapping_id);
-		// 			auto row_node_weights = mappings.get_weights(row_mapping_id);
-		// 			auto col_node_ids = mappings.get_node_ids(col_mapping_id);
-		// 			auto col_node_weights = mappings.get_weights(col_mapping_id);
-		//
-		// 			for (int i = 0; i < row_node_ids.size(); ++i)
-		// 			{
-		// 				for (int j = 0; j < col_node_ids.size(); ++j)
-		// 				{
-		// 					double *block_ptr = mat_out.get_block(i, j);
-		// 					assert(block_ptr);
-		//
-		// 					for (int vi = 0; vi < value_dim; ++vi)
-		// 					{
-		// 						for (int vj = 0; vj < value_dim; ++vj)
-		// 						{
-		// 							int psd_i = value_dim * local_i + vi;
-		// 							int psd_j = value_dim * local_j + vj;
-		// 							int psd_offset = index_upper_mat(basis_num * value_dim, psd_i, psd_j);
-		// 							double val = row_node_weights[i] * col_node_weights[i] * psd_mat[psd_offset];
-		// 							atomicAdd(block_ptr + index_upper_mat(value_dim, vi, vj), val);
-		// 						}
-		// 					}
-		// 				}
-		// 			}
-		// 		}
-		// 	}
-		// }
-
-		template <typename ScalarKernel>
+		template <typename ScalarKernel, int BLOCK_SIZE>
 		__global__ void assemble_scalar_kernel(
 			ElementBasesView bases,
 			AssemblyCacheView cache,
+			int elem_num,
 			Span<const typename ScalarKernel::Material> materials,
 			Span<const double> unknown,
 			double *scalar_out)
 		{
 			using Material = typename ScalarKernel::Material;
 
-			assert(blockDim.x == 32);
-			int elem_id = blockIdx.x;
-			int warp_id = threadIdx.x;
-
-			auto &cache_desc = cache.desc[elem_id];
-			int quad_num = cache_desc.weighted_measure_range.num;
+			assert(blockDim.x == BLOCK_SIZE);
+			int elem_id = blockIdx.x * blockDim.x + threadIdx.x;
 			double scalar = 0.0; // local scalar value.
 
-			for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
+			if (elem_id < elem_num)
 			{
-				// Material is per cached quadrature point, matching weighted_measure.
-				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
+				auto &cache_desc = cache.desc[elem_id];
+				int quad_num = cache_desc.weighted_measure_range.num;
 
-				double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
-				scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
+				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
+				{
+					// Material is per cached quadrature point, matching weighted_measure.
+					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
+
+					double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
+					scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
+				}
 			}
 
-			using BlockReduce = cub::BlockReduce<double, 32>;
+			using BlockReduce = cub::BlockReduce<double, BLOCK_SIZE>;
 			__shared__ typename BlockReduce::TempStorage reduce_temp;
 			double sum = BlockReduce(reduce_temp).Sum(scalar);
-			if (warp_id == 0)
+			if (threadIdx.x == 0)
 			{
 				atomicAdd(scalar_out, sum);
 			}
@@ -236,15 +208,17 @@ namespace polyfem::assembler
 		{
 			using Material = typename ScalarKernel::Material;
 
-			assert(blockDim.x == 32);
-			int elem_id = blockIdx.x;
-			int warp_id = threadIdx.x;
+			int elem_id = blockIdx.x * blockDim.x + threadIdx.x;
+			if (elem_id >= scalar_out.size())
+			{
+				return;
+			}
 
 			auto &cache_desc = cache.desc[elem_id];
 			int quad_num = cache_desc.weighted_measure_range.num;
 			double scalar = 0.0; // local scalar value.
 
-			for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
+			for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 			{
 				// Material is per cached quadrature point, matching weighted_measure.
 				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
@@ -253,19 +227,14 @@ namespace polyfem::assembler
 				scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
 			}
 
-			using BlockReduce = cub::BlockReduce<double, 32>;
-			__shared__ typename BlockReduce::TempStorage reduce_temp;
-			double sum = BlockReduce(reduce_temp).Sum(scalar);
-			if (warp_id == 0)
-			{
-				scalar_out[elem_id] = sum;
-			}
+			scalar_out[elem_id] += scalar;
 		}
 
 		template <typename VectorKernel>
 		__global__ void assemble_vector_kernel(
 			ElementBasesView bases,
 			AssemblyCacheView cache,
+			Span<const VectorAssemblyTask> tasks,
 			Span<const typename VectorKernel::Material> materials,
 			Span<const double> unknown,
 			Span<double> vec_out)
@@ -275,41 +244,35 @@ namespace polyfem::assembler
 			using Material = typename VectorKernel::Material;
 			using Vec = Eigen::Vector<double, VALUE_DIM>;
 
-			assert(blockDim.x == 32);
-			int elem_id = blockIdx.x;
-			int warp_id = threadIdx.x;
+			int task_num = tasks.size();
+			int task_id = blockIdx.x * blockDim.x + threadIdx.x;
+			if (task_id >= task_num)
+			{
+				return;
+			}
 
-			auto &elem_desc = bases.element_desc[elem_id];
-			auto &basis_desc = elem_desc.basis_desc;
-			int basis_num = basis_desc.basis_num;
+			VectorAssemblyTask task = tasks[task_id];
+			int elem_id = task.elem_id;
+			int basis_id = task.local_i;
 			auto &cache_desc = cache.desc[elem_id];
 			int quad_num = cache_desc.weighted_measure_range.num;
+			Vec grad_i = Vec::Zero(); // local vector.
 
-			using BlockReduce = cub::BlockReduce<Vec, 32>;
-			__shared__ typename BlockReduce::TempStorage reduce_temp;
-
-			for (int basis_id = 0; basis_id < basis_num; ++basis_id)
+			for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 			{
-				Vec grad_i = Vec::Zero(); // local vector.
+				// Material is per cached quadrature point, matching weighted_measure.
+				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
-				{
-					// Material is per cached quadrature point, matching weighted_measure.
-					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
+				Vec local_grad_i = Vec::Zero();
+				auto local_grad_i_span = Span<double>(local_grad_i.data(), local_grad_i.size());
+				VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, cache, material, unknown, local_grad_i_span);
+				grad_i += local_grad_i * cache.get_weighted_measure(elem_id, quad_id);
+			}
 
-					Vec local_grad_i = Vec::Zero();
-					auto local_grad_i_span = Span<double>(local_grad_i.data(), local_grad_i.size());
-					VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, cache, material, unknown, local_grad_i_span);
-					grad_i += local_grad_i * cache.get_weighted_measure(elem_id, quad_id);
-				}
-
-				Vec sum = BlockReduce(reduce_temp).Sum(grad_i);
-
-				if (warp_id == 0 && !sum.isZero())
-				{
-					Span<const double> sum_span(sum.data(), sum.size());
-					scatter_vec_i<VALUE_DIM>(elem_id, basis_id, bases, sum_span, vec_out);
-				}
+			if (!grad_i.isZero())
+			{
+				Span<const double> grad_i_span(grad_i.data(), grad_i.size());
+				scatter_vec_i<VALUE_DIM>(elem_id, basis_id, bases, grad_i_span, vec_out);
 			}
 		}
 
@@ -317,6 +280,7 @@ namespace polyfem::assembler
 		__global__ void assemble_matrix_kernel(
 			ElementBasesView bases,
 			AssemblyCacheView cache,
+			Span<const MatrixAssemblyTask> tasks,
 			Span<const typename MatrixKernel::Material> materials,
 			Span<const double> unknown,
 			BSRMatrixMutableView mat_out)
@@ -326,52 +290,41 @@ namespace polyfem::assembler
 			using Material = typename MatrixKernel::Material;
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
 
-			assert(blockDim.x == 32);
-			int elem_id = blockIdx.x;
-			int warp_id = threadIdx.x;
-
-			auto &elem_desc = bases.element_desc[elem_id];
-			auto &basis_desc = elem_desc.basis_desc;
-			int basis_num = basis_desc.basis_num;
-			auto &cache_desc = cache.desc[elem_id];
-			int hessian_ij_num = upper_mat_size(basis_num);
-			int quad_num = cache_desc.weighted_measure_range.num;
-
-			// extern __shared__ double shared_psd_out[];
-			// int psd_temp_size = upper_mat_size(basis_num);
-			// auto psd_out_span = (psd_out) ? Span<double>(psd_out, psd_temp_size) : Span<double>(shared_psd_out, psd_temp_size);
-
-			using BlockReduce = cub::BlockReduce<Mat, 32>;
-			__shared__ typename BlockReduce::TempStorage reduce_temp;
-
-			for (int ij = 0; ij < hessian_ij_num; ++ij)
+			const int task_num = static_cast<int>(tasks.size());
+			const int task_id = blockIdx.x * blockDim.x + threadIdx.x;
+			if (task_id >= task_num)
 			{
-				auto [bi, bj] = inverse_index_upper_mat(basis_num, ij);
-				Mat hess_ij = Mat::Zero(); // local Hij block.
+				return;
+			}
 
-				for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
+			MatrixAssemblyTask task = tasks[task_id];
+			int elem_id = task.elem_id;
+			int bi = task.local_i;
+			int bj = task.local_j;
+			auto &cache_desc = cache.desc[elem_id];
+			int quad_num = cache_desc.weighted_measure_range.num;
+			Mat hess_ij = Mat::Zero(); // local Hij block.
+
+			for (int quad_id = 0; quad_id < quad_num; ++quad_id)
+			{
+				// Material is per cached quadrature point, matching weighted_measure.
+				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
+
+				Mat local_hess_ij = Mat::Zero();
+				auto hess_ij_span = Span<double>(local_hess_ij.data(), local_hess_ij.size());
+				MatrixKernel::eval_matrix(elem_id, quad_id, bi, bj, bases, cache, material, unknown, hess_ij_span);
+				hess_ij += local_hess_ij * cache.get_weighted_measure(elem_id, quad_id);
+			}
+
+			if (!hess_ij.isZero())
+			{
+				Span<const double> hess_ij_span(hess_ij.data(), hess_ij.size());
+				scatter_mat_ij<VALUE_DIM>(elem_id, bi, bj, bases, hess_ij_span, mat_out);
+				if (bj > bi)
 				{
-					// Material is per cached quadrature point, matching weighted_measure.
-					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
-
-					Mat local_hess_ij = Mat::Zero();
-					auto hess_ij_span = Span<double>(local_hess_ij.data(), local_hess_ij.size());
-					MatrixKernel::eval_matrix(elem_id, quad_id, bi, bj, bases, cache, material, unknown, hess_ij_span);
-					hess_ij += local_hess_ij * cache.get_weighted_measure(elem_id, quad_id);
-				}
-
-				Mat sum = BlockReduce(reduce_temp).Sum(hess_ij);
-
-				if (warp_id == 0 && !sum.isZero())
-				{
-					Span<const double> sum_span(sum.data(), sum.size());
-					scatter_mat_ij<VALUE_DIM>(elem_id, bi, bj, bases, sum_span, mat_out);
-					if (bj > bi)
-					{
-						Mat sum_t = sum.transpose();
-						Span<const double> sum_t_span(sum_t.data(), sum_t.size());
-						scatter_mat_ij<VALUE_DIM>(elem_id, bj, bi, bases, sum_t_span, mat_out);
-					}
+					Mat hess_ji = hess_ij.transpose();
+					Span<const double> hess_ji_span(hess_ji.data(), hess_ji.size());
+					scatter_mat_ij<VALUE_DIM>(elem_id, bj, bi, bases, hess_ji_span, mat_out);
 				}
 			}
 		}
@@ -398,7 +351,7 @@ namespace polyfem::assembler
 					throw std::runtime_error("Material missing!");
 				}
 
-				const auto &cache_desc = cache_view.desc[elem_id];
+				auto &cache_desc = cache_view.desc[elem_id];
 				for (int q = 0; q < cache_desc.weighted_measure_range.num; ++q)
 				{
 					double x = cache_view.get_physical_x(elem_id, q);
@@ -446,9 +399,11 @@ namespace polyfem::assembler
 		auto d_scalar_out = cuda::make_buffer<double>(p.stream, p.mr, 1, 0.0);
 
 		int elem_num = bases.element_desc.size();
-		detail::assemble_scalar_kernel<ScalarKernel><<<elem_num, 32, 0, p.stream.get()>>>(
+		int grid_num = div_round_up(elem_num, 128);
+		detail::assemble_scalar_kernel<ScalarKernel, 128><<<grid_num, 128, 0, p.stream.get()>>>(
 			d_bases,
 			d_cache,
+			elem_num,
 			d_materials,
 			d_unknown,
 			d_scalar_out.data());
@@ -490,7 +445,8 @@ namespace polyfem::assembler
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 
-		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<elem_num, 32, 0, p.stream.get()>>>(
+		int grid_num = div_round_up(elem_num, 128);
+		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<grid_num, 128, 0, p.stream.get()>>>(
 			d_bases,
 			d_cache,
 			d_materials,
@@ -526,11 +482,21 @@ namespace polyfem::assembler
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
+		auto vector_tasks = detail::build_vector_tasks(bases);
+		const int task_num = static_cast<int>(vector_tasks.size());
+		assert(static_cast<std::size_t>(task_num) == vector_tasks.size());
+		auto d_vector_tasks = cuda::make_buffer<detail::VectorAssemblyTask>(
+			p.stream,
+			p.mr,
+			vector_tasks.size(),
+			cuda::no_init);
+		cuda::copy_bytes(p.stream, vector_tasks, d_vector_tasks);
 
-		int elem_num = bases.element_desc.size();
-		detail::assemble_vector_kernel<VectorKernel><<<elem_num, 32, 0, p.stream.get()>>>(
+		int grad_num = div_round_up(task_num, 128);
+		detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream.get()>>>(
 			d_bases,
 			d_cache,
+			d_vector_tasks,
 			d_materials,
 			d_unknown,
 			vec_out);
@@ -564,14 +530,27 @@ namespace polyfem::assembler
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
+		auto matrix_tasks = detail::build_matrix_tasks(bases);
+		const int task_num = static_cast<int>(matrix_tasks.size());
+		assert(static_cast<std::size_t>(task_num) == matrix_tasks.size());
+		auto d_matrix_tasks = cuda::make_buffer<detail::MatrixAssemblyTask>(
+			p.stream,
+			p.mr,
+			matrix_tasks.size(),
+			cuda::no_init);
+		cuda::copy_bytes(p.stream, matrix_tasks, d_matrix_tasks);
 
-		int elem_num = bases.element_desc.size();
-		detail::assemble_matrix_kernel<MatrixKernel><<<elem_num, 32, 0, p.stream.get()>>>(
-			d_bases,
-			d_cache,
-			d_materials,
-			d_unknown,
-			mat_out);
+		if (task_num > 0)
+		{
+			int grad_num = div_round_up(task_num, 128);
+			detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream.get()>>>(
+				d_bases,
+				d_cache,
+				d_matrix_tasks,
+				d_materials,
+				d_unknown,
+				mat_out);
+		}
 		p.stream.sync();
 	}
 
