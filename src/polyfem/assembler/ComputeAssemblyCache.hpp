@@ -20,7 +20,7 @@ namespace polyfem::assembler
 		const ElementBasesView &geom_bases,
 		int element_id,
 		bool is_mass,
-		AssemblyTempStorage temp);
+		AssemblyTempStorage &temp);
 
 	/// Build assembly cache for all elements.
 	///

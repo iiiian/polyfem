@@ -48,7 +48,7 @@ namespace polyfem::assembler
 		const ElementBasesView &geom_bases,
 		int element_id,
 		bool is_mass,
-		AssemblyTempStorage temp)
+		AssemblyTempStorage &temp)
 	{
 		assert(0 <= element_id && element_id < bases.element_desc.size());
 		assert(0 <= element_id && element_id < geom_bases.element_desc.size());
@@ -115,9 +115,9 @@ namespace polyfem::assembler
 		}
 	}
 
-	template void compute_assembly_cache_single<1>(const ElementBasesView &, const ElementBasesView &, int, bool, AssemblyTempStorage);
-	template void compute_assembly_cache_single<2>(const ElementBasesView &, const ElementBasesView &, int, bool, AssemblyTempStorage);
-	template void compute_assembly_cache_single<3>(const ElementBasesView &, const ElementBasesView &, int, bool, AssemblyTempStorage);
+	template void compute_assembly_cache_single<1>(const ElementBasesView &, const ElementBasesView &, int, bool, AssemblyTempStorage &);
+	template void compute_assembly_cache_single<2>(const ElementBasesView &, const ElementBasesView &, int, bool, AssemblyTempStorage &);
+	template void compute_assembly_cache_single<3>(const ElementBasesView &, const ElementBasesView &, int, bool, AssemblyTempStorage &);
 
 	AssemblyCache compute_assembly_cache_batched(
 		const ElementBasesView &bases,
