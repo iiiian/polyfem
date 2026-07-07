@@ -92,6 +92,7 @@ namespace polyfem::assembler
 		{
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
 			auto mat = Eigen::Map<const Mat>(local_mat.data());
+			assert(global_mat.block_dim == VALUE_DIM);
 
 			auto &elem_desc = bases.element_desc[elem_id];
 			auto &mappings = bases.dof_mapping_store;
@@ -107,12 +108,12 @@ namespace polyfem::assembler
 			{
 				for (int j = 0; j < col_node_ids.size(); ++j)
 				{
-					double *block_ptr = global_mat.get_block(i, j);
+					double *block_ptr = global_mat.get_block(row_node_ids[i], col_node_ids[j]);
 					assert(block_ptr);
 
 					for (int k = 0; k < mat.size(); ++k)
 					{
-						double val = row_node_weights[i] * col_node_weights[i] * mat.data()[k];
+						double val = row_node_weights[i] * col_node_weights[j] * mat.data()[k];
 						atomicAdd(block_ptr + k, val);
 					}
 				}
@@ -138,9 +139,10 @@ namespace polyfem::assembler
 
 			for (int i = 0; i < node_ids.size(); ++i)
 			{
-				for (int k = 0; k < global_vec.size(); ++k)
+				for (int k = 0; k < value_dim; ++k)
 				{
 					int offset = node_ids[i] * value_dim + k;
+					assert(offset >= 0 && offset < global_vec.size());
 					double val = node_weights[i] * local_vec[k];
 					atomicAdd(global_vec.data() + offset, val);
 				}
@@ -202,34 +204,25 @@ namespace polyfem::assembler
 			int elem_id = blockIdx.x;
 			int warp_id = threadIdx.x;
 
-			auto &elem_desc = bases.element_desc[warp_id];
-			auto &quad_desc = elem_desc.quadrature_desc;
-			int quad_num = quad_desc.w_range.num;
-			int max_loop_num = quad_num;
-			int wave_num = div_round_up(max_loop_num, 32);
+			auto &cache_desc = cache.desc[elem_id];
+			int quad_num = cache_desc.weighted_measure_range.num;
+			double scalar = 0.0; // local scalar value.
 
-			for (int w = 0; w < wave_num; ++w)
+			for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
 			{
-				int loop_id = w * 32 + warp_id;
-				int quad_id = loop_id;
-				double scalar = 0.0; // local scalar value.
+				// Material is per cached quadrature point, matching weighted_measure.
+				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				if (loop_id < max_loop_num)
-				{
-					// Material is per quadrature, thus the indexing rule is the same as quadrature weight.
-					const Material &material = materials[quad_desc.w_range.offset + quad_id];
+				double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
+				scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
+			}
 
-					scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
-					scalar *= cache.get_weighted_measure(elem_id, quad_id);
-				}
-
-				using BlockReduce = cub::BlockReduce<double, 32>;
-				__shared__ typename BlockReduce::TempStorage reduce_temp;
-				double sum = BlockReduce(reduce_temp).Sum(scalar);
-				if (warp_id == 0)
-				{
-					atomicAdd(scalar_out, sum);
-				}
+			using BlockReduce = cub::BlockReduce<double, 32>;
+			__shared__ typename BlockReduce::TempStorage reduce_temp;
+			double sum = BlockReduce(reduce_temp).Sum(scalar);
+			if (warp_id == 0)
+			{
+				atomicAdd(scalar_out, sum);
 			}
 		}
 
@@ -247,34 +240,25 @@ namespace polyfem::assembler
 			int elem_id = blockIdx.x;
 			int warp_id = threadIdx.x;
 
-			auto &elem_desc = bases.element_desc[warp_id];
-			auto &quad_desc = elem_desc.quadrature_desc;
-			int quad_num = quad_desc.w_range.num;
-			int max_loop_num = quad_num;
-			int wave_num = div_round_up(max_loop_num, 32);
+			auto &cache_desc = cache.desc[elem_id];
+			int quad_num = cache_desc.weighted_measure_range.num;
+			double scalar = 0.0; // local scalar value.
 
-			for (int w = 0; w < wave_num; ++w)
+			for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
 			{
-				int loop_id = w * 32 + warp_id;
-				int quad_id = loop_id;
-				double scalar = 0.0; // local scalar value.
+				// Material is per cached quadrature point, matching weighted_measure.
+				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				if (loop_id < max_loop_num)
-				{
-					// Material is per quadrature, thus the indexing rule is the same as quadrature weight.
-					const Material &material = materials[quad_desc.w_range.offset + quad_id];
+				double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
+				scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
+			}
 
-					scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
-					scalar *= cache.get_weighted_measure(elem_id, quad_id);
-				}
-
-				using BlockReduce = cub::BlockReduce<double, 32>;
-				__shared__ typename BlockReduce::TempStorage reduce_temp;
-				double sum = BlockReduce(reduce_temp).Sum(scalar);
-				if (warp_id == 0)
-				{
-					scalar_out[elem_id] = sum;
-				}
+			using BlockReduce = cub::BlockReduce<double, 32>;
+			__shared__ typename BlockReduce::TempStorage reduce_temp;
+			double sum = BlockReduce(reduce_temp).Sum(scalar);
+			if (warp_id == 0)
+			{
+				scalar_out[elem_id] = sum;
 			}
 		}
 
@@ -295,37 +279,33 @@ namespace polyfem::assembler
 			int elem_id = blockIdx.x;
 			int warp_id = threadIdx.x;
 
-			auto &elem_desc = bases.element_desc[warp_id];
+			auto &elem_desc = bases.element_desc[elem_id];
 			auto &basis_desc = elem_desc.basis_desc;
 			int basis_num = basis_desc.basis_num;
-			auto &quad_desc = elem_desc.quadrature_desc;
-			int quad_num = quad_desc.w_range.num;
-			int max_loop_num = basis_num * quad_num;
-			int wave_num = div_round_up(max_loop_num, 32);
+			auto &cache_desc = cache.desc[elem_id];
+			int quad_num = cache_desc.weighted_measure_range.num;
 
-			for (int w = 0; w < wave_num; ++w)
+			using BlockReduce = cub::BlockReduce<Vec, 32>;
+			__shared__ typename BlockReduce::TempStorage reduce_temp;
+
+			for (int basis_id = 0; basis_id < basis_num; ++basis_id)
 			{
-				int loop_id = w * 32 + warp_id;
-				int quad_id = loop_id % basis_num;
-				int basis_id = loop_id / basis_num;
 				Vec grad_i = Vec::Zero(); // local vector.
 
-				if (loop_id < max_loop_num)
+				for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
 				{
-					// Material is per quadrature, thus the indexing rule is the same as quadrature weight.
-					const Material &material = materials[quad_desc.w_range.offset + quad_id];
+					// Material is per cached quadrature point, matching weighted_measure.
+					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-					VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, cache, material, unknown, grad_i);
-					grad_i *= cache.get_weighted_measure(elem_id, quad_id);
+					Vec local_grad_i = Vec::Zero();
+					auto local_grad_i_span = Span<double>(local_grad_i.data(), local_grad_i.size());
+					VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, cache, material, unknown, local_grad_i_span);
+					grad_i += local_grad_i * cache.get_weighted_measure(elem_id, quad_id);
 				}
 
-				// Wrap reduction, sum local gradient Gi from all quadrature points before scattering.
-				bool is_head = (loop_id < max_loop_num) && ((warp_id == 0) || (quad_id == 0));
-				using WarpReduce = cub::WarpReduce<Vec>;
-				__shared__ typename WarpReduce::TempStorage reduce_temp;
-				Vec sum = WarpReduce(reduce_temp).HeadSegmentedSum(grad_i, is_head);
+				Vec sum = BlockReduce(reduce_temp).Sum(grad_i);
 
-				if (is_head && !grad_i.isZero())
+				if (warp_id == 0 && !sum.isZero())
 				{
 					Span<const double> sum_span(sum.data(), sum.size());
 					scatter_vec_i<VALUE_DIM>(elem_id, basis_id, bases, sum_span, vec_out);
@@ -344,95 +324,93 @@ namespace polyfem::assembler
 			constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
 
 			using Material = typename MatrixKernel::Material;
-			using Vec = Eigen::Vector<double, VALUE_DIM>;
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
 
 			assert(blockDim.x == 32);
 			int elem_id = blockIdx.x;
 			int warp_id = threadIdx.x;
 
-			auto &elem_desc = bases.element_desc[warp_id];
+			auto &elem_desc = bases.element_desc[elem_id];
 			auto &basis_desc = elem_desc.basis_desc;
 			int basis_num = basis_desc.basis_num;
-			auto &quad_desc = elem_desc.quadrature_desc;
+			auto &cache_desc = cache.desc[elem_id];
 			int hessian_ij_num = upper_mat_size(basis_num);
-			int quad_num = quad_desc.w_range.num;
-			int max_loop_num = hessian_ij_num * quad_num;
-			int wave_num = div_round_up(max_loop_num, 32);
+			int quad_num = cache_desc.weighted_measure_range.num;
 
 			// extern __shared__ double shared_psd_out[];
 			// int psd_temp_size = upper_mat_size(basis_num);
 			// auto psd_out_span = (psd_out) ? Span<double>(psd_out, psd_temp_size) : Span<double>(shared_psd_out, psd_temp_size);
 
-			for (int w = 0; w < wave_num; ++w)
+			using BlockReduce = cub::BlockReduce<Mat, 32>;
+			__shared__ typename BlockReduce::TempStorage reduce_temp;
+
+			for (int ij = 0; ij < hessian_ij_num; ++ij)
 			{
-				int loop_id = w * 32 + warp_id;
-				int quad_id = loop_id % hessian_ij_num;
-				int ij = loop_id / hessian_ij_num;
 				auto [bi, bj] = inverse_index_upper_mat(basis_num, ij);
 				Mat hess_ij = Mat::Zero(); // local Hij block.
 
-				if (loop_id < max_loop_num)
+				for (int quad_id = warp_id; quad_id < quad_num; quad_id += 32)
 				{
-					// Material is per quadrature, thus the indexing rule is the same as quadrature weight.
-					const Material &material = materials[quad_desc.w_range.offset + quad_id];
+					// Material is per cached quadrature point, matching weighted_measure.
+					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-					auto hess_ij_span = Span<double>(hess_ij.data(), hess_ij.size());
+					Mat local_hess_ij = Mat::Zero();
+					auto hess_ij_span = Span<double>(local_hess_ij.data(), local_hess_ij.size());
 					MatrixKernel::eval_matrix(elem_id, quad_id, bi, bj, bases, cache, material, unknown, hess_ij_span);
-					hess_ij *= cache.get_weighted_measure(elem_id, quad_id);
+					hess_ij += local_hess_ij * cache.get_weighted_measure(elem_id, quad_id);
 				}
 
-				// Wrap reduction, sum local hessian Hij from all quadrature points before scattering.
-				bool is_head = (loop_id < max_loop_num) && ((warp_id == 0) || (quad_id == 0));
-				using WarpReduce = cub::WarpReduce<Mat>;
-				__shared__ typename WarpReduce::TempStorage reduce_temp;
-				Mat sum = WarpReduce(reduce_temp).HeadSegmentedSum(hess_ij, is_head);
+				Mat sum = BlockReduce(reduce_temp).Sum(hess_ij);
 
-				if (is_head && !hess_ij.isZero())
+				if (warp_id == 0 && !sum.isZero())
 				{
 					Span<const double> sum_span(sum.data(), sum.size());
 					scatter_mat_ij<VALUE_DIM>(elem_id, bi, bj, bases, sum_span, mat_out);
 					if (bj > bi)
 					{
-						scatter_mat_ij<VALUE_DIM>(elem_id, bj, bi, bases, sum_span, mat_out);
+						Mat sum_t = sum.transpose();
+						Span<const double> sum_t_span(sum_t.data(), sum_t.size());
+						scatter_mat_ij<VALUE_DIM>(elem_id, bj, bi, bases, sum_t_span, mat_out);
 					}
 				}
 			}
 		}
 
 		template <typename Material, int dim>
-		cuda::device_buffer<Material> prepare_meterials(
+		cuda::device_buffer<Material> prepare_materials(
 			const ElementBases &bases,
 			const AssemblyCache &cache,
 			const material::MaterialExprRegistry &material_registry,
 			CudaExecutionPolicy policy)
 		{
-			int quad_num = bases.quadrature_store.view().w.size();
-			assert(quad_num != 0);
+			auto cache_view = cache.view();
+
+			int global_material_num = cache_view.weighted_measure.size();
+			assert(global_material_num != 0);
 			int elem_num = bases.element_desc.size();
 			assert(elem_num != 0);
 
-			std::vector<Material> materials(quad_num);
-			utils::maybe_parallel_for(elem_num, [quad_num, &material_registry, &cache, &materials](int elem_id) {
-				for (int q = 0; q < quad_num; ++q)
+			std::vector<Material> materials(global_material_num);
+			utils::maybe_parallel_for(elem_num, [&cache_view, &material_registry, &materials](int elem_id) {
+				auto material_expr = material_registry.get<typename Material::ExprType>(elem_id);
+				if (material_expr == nullptr)
 				{
-					auto material_expr = material_registry.get<typename Material::ExprType>(elem_id);
-					if (material_expr == nullptr)
-					{
-						throw std::runtime_error("Material missing!");
-					}
+					throw std::runtime_error("Material missing!");
+				}
 
-					auto cache_view = cache.view();
+				const auto &cache_desc = cache_view.desc[elem_id];
+				for (int q = 0; q < cache_desc.weighted_measure_range.num; ++q)
+				{
 					double x = cache_view.get_physical_x(elem_id, q);
 					double y = (dim >= 2) ? cache_view.get_physical_y(elem_id, q) : 0.0;
 					double z = (dim >= 3) ? cache_view.get_physical_z(elem_id, q) : 0.0;
 					Material m = material_expr->eval_expr(x, y, z, 0, elem_id);
 
-					materials[q] = std::move(m);
+					materials[cache_desc.weighted_measure_range.offset + q] = std::move(m);
 				}
 			});
 			auto d_materials =
-				cuda::make_buffer<Material>(policy.stream, policy.mr, quad_num, cuda::no_init);
+				cuda::make_buffer<Material>(policy.stream, policy.mr, global_material_num, cuda::no_init);
 			cuda::copy_bytes(policy.stream, materials, d_materials);
 			policy.stream.sync();
 			return d_materials;
@@ -441,8 +419,8 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	double assemble_scalar(
-		const ElementBases &bases,
-		const AssemblyCache &cache,
+		ElementBases &bases,
+		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		CudaExecutionPolicy policy = {})
@@ -460,25 +438,30 @@ namespace polyfem::assembler
 			}
 		}
 
-		auto d_materials = detail::prepare_meterials<Material, DIM>(bases, cache, material_registry, policy);
+		auto d_bases = bases.device_view(p);
+		auto d_cache = cache.device_view(p);
+		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 		auto d_scalar_out = cuda::make_buffer<double>(p.stream, p.mr, 1, 0.0);
 
 		int elem_num = bases.element_desc.size();
 		detail::assemble_scalar_kernel<ScalarKernel><<<elem_num, 32, 0, p.stream.get()>>>(
-			bases.view(),
-			cache.view(),
+			d_bases,
+			d_cache,
 			d_materials,
 			d_unknown,
 			d_scalar_out.data());
+		double scalar_out = 0.0;
+		cuda::copy_bytes(p.stream, d_scalar_out, Span<double>(&scalar_out, 1));
 		p.stream.sync();
+		return scalar_out;
 	}
 
 	template <typename ScalarKernel>
 	void assemble_scalar_per_element(
-		const ElementBases &bases,
-		const AssemblyCache &cache,
+		ElementBases &bases,
+		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> vec_out,
@@ -497,24 +480,29 @@ namespace polyfem::assembler
 			}
 		}
 
-		auto d_materials = detail::prepare_meterials<Material, DIM>(bases, cache, material_registry, policy);
+		auto d_bases = bases.device_view(p);
+		auto d_cache = cache.device_view(p);
+		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
+
+		int elem_num = bases.element_desc.size();
+		assert(vec_out.size() == elem_num);
+
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 
-		int elem_num = bases.element_desc.size();
 		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<elem_num, 32, 0, p.stream.get()>>>(
-			bases.view(),
-			cache.view(),
+			d_bases,
+			d_cache,
 			d_materials,
 			d_unknown,
-			vec_out.data());
+			vec_out);
 		p.stream.sync();
 	}
 
 	template <typename VectorKernel>
 	void assemble_vector(
-		const ElementBases &bases,
-		const AssemblyCache &cache,
+		ElementBases &bases,
+		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> vec_out,
@@ -533,14 +521,16 @@ namespace polyfem::assembler
 			}
 		}
 
-		auto d_materials = detail::prepare_meterials<Material, DIM>(bases, cache, material_registry, policy);
+		auto d_bases = bases.device_view(p);
+		auto d_cache = cache.device_view(p);
+		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 
 		int elem_num = bases.element_desc.size();
 		detail::assemble_vector_kernel<VectorKernel><<<elem_num, 32, 0, p.stream.get()>>>(
-			bases.view(),
-			cache.view(),
+			d_bases,
+			d_cache,
 			d_materials,
 			d_unknown,
 			vec_out);
@@ -549,8 +539,8 @@ namespace polyfem::assembler
 
 	template <typename MatrixKernel>
 	void assemble_matrix(
-		const ElementBases &bases,
-		const AssemblyCache &cache,
+		ElementBases &bases,
+		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		BSRMatrixMutableView mat_out,
@@ -569,14 +559,16 @@ namespace polyfem::assembler
 			}
 		}
 
-		auto d_materials = detail::prepare_meterials<Material, DIM>(bases, cache, material_registry, policy);
+		auto d_bases = bases.device_view(p);
+		auto d_cache = cache.device_view(p);
+		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 
 		int elem_num = bases.element_desc.size();
 		detail::assemble_matrix_kernel<MatrixKernel><<<elem_num, 32, 0, p.stream.get()>>>(
-			bases.view(),
-			cache.view(),
+			d_bases,
+			d_cache,
 			d_materials,
 			d_unknown,
 			mat_out);
