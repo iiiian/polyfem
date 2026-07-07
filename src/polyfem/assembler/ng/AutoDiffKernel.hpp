@@ -24,7 +24,7 @@ namespace polyfem::assembler
 		};
 
 		template <int value_dim>
-		__device__ Eigen::Vector<double, value_dim> get_local_node_unknown(
+		POLYFEM_BOTH Eigen::Vector<double, value_dim> get_local_node_unknown(
 			int elem_id,
 			int local_node_id,
 			const ElementBasesView &bases,
