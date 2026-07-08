@@ -68,7 +68,7 @@ namespace polyfem::assembler
 			int elem_id,
 			int quad_id,
 			const ElementBasesView &bases,
-			const AssemblyCacheView &cache,
+			const ElementAssemblyCacheView &cache,
 			const Material &material,
 			Span<const double> unknown)
 		{
@@ -88,13 +88,13 @@ namespace polyfem::assembler
 			{
 				if constexpr (NEED_UNKNOWN_VALUE)
 				{
-					double phi = cache.get_basis_value(elem_id, b, quad_id);
+					double phi = cache.get_basis_value(b, quad_id);
 					Vec local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					u_value += phi * local_node_unknown;
 				}
 				if constexpr (NEED_UNKNOWN_GRAD)
 				{
-					Vec grad_phi = cache.get_basis_grad_phy<DIM>(elem_id, b, quad_id);
+					Vec grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
 					Vec local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					gradu_value += local_node_unknown * grad_phi.transpose();
 				}
@@ -128,7 +128,7 @@ namespace polyfem::assembler
 			int quad_id,
 			int local_i,
 			const ElementBasesView &bases,
-			const AssemblyCacheView &cache,
+			const ElementAssemblyCacheView &cache,
 			const Material &material,
 			Span<const double> unknown,
 			Span<double> vector_i)
@@ -151,13 +151,13 @@ namespace polyfem::assembler
 			{
 				if constexpr (NEED_UNKNOWN_VALUE)
 				{
-					double phi = cache.get_basis_value(elem_id, b, quad_id);
+					double phi = cache.get_basis_value(b, quad_id);
 					Vec1 local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					u_value += phi * local_node_unknown;
 				}
 				if constexpr (NEED_UNKNOWN_GRAD)
 				{
-					Vec1 grad_phi = cache.get_basis_grad_phy<DIM>(elem_id, b, quad_id);
+					Vec1 grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
 					Vec1 local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					gradu_value += local_node_unknown * grad_phi.transpose();
 				}
@@ -165,8 +165,8 @@ namespace polyfem::assembler
 
 			using AD = autodiff::Double1<VALUE_DIM>;
 			using ADGrad = typename AD::Grad;
-			double phi_i = cache.get_basis_value(elem_id, local_i, quad_id);
-			Vec2 grad_phi_i = cache.get_basis_grad_phy<DIM>(elem_id, local_i, quad_id);
+			double phi_i = cache.get_basis_value(local_i, quad_id);
+			Vec2 grad_phi_i = cache.get_basis_grad_phy<DIM>(local_i, quad_id);
 
 			// Seed autodiff unknown vector u.
 			// If NEED_UNKNOWN_VALUE, autodiff_u is Eigen::Matrix<AD, VALUE_DIM, 1>. Else empty dummy type.
@@ -231,7 +231,7 @@ namespace polyfem::assembler
 			int local_i,
 			int local_j,
 			const ElementBasesView &bases,
-			const AssemblyCacheView &cache,
+			const ElementAssemblyCacheView &cache,
 			const Material &material,
 			Span<const double> unknown,
 			Span<double> matrix_ij)
@@ -254,13 +254,13 @@ namespace polyfem::assembler
 			{
 				if constexpr (NEED_UNKNOWN_VALUE)
 				{
-					double phi = cache.get_basis_value(elem_id, b, quad_id);
+					double phi = cache.get_basis_value(b, quad_id);
 					Vec1 local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					u_value += phi * local_node_unknown;
 				}
 				if constexpr (NEED_UNKNOWN_GRAD)
 				{
-					Vec1 grad_phi = cache.get_basis_grad_phy<DIM>(elem_id, b, quad_id);
+					Vec1 grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
 					Vec1 local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					gradu_value += local_node_unknown * grad_phi.transpose();
 				}
@@ -269,10 +269,10 @@ namespace polyfem::assembler
 			using AD = autodiff::Double2<VALUE_DIM>;
 			using ADGrad = typename AD::Grad;
 			using ADHess = typename AD::Hess;
-			double phi_i = cache.get_basis_value(elem_id, local_i, quad_id);
-			double phi_j = cache.get_basis_value(elem_id, local_j, quad_id);
-			Vec2 grad_phi_i = cache.get_basis_grad_phy<DIM>(elem_id, local_i, quad_id);
-			Vec2 grad_phi_j = cache.get_basis_grad_phy<DIM>(elem_id, local_j, quad_id);
+			double phi_i = cache.get_basis_value(local_i, quad_id);
+			double phi_j = cache.get_basis_value(local_j, quad_id);
+			Vec2 grad_phi_i = cache.get_basis_grad_phy<DIM>(local_i, quad_id);
+			Vec2 grad_phi_j = cache.get_basis_grad_phy<DIM>(local_j, quad_id);
 
 			// Autodiff type is storage intensive. A single Hessian autodiff scalar (Double2) takes 128 bytes.
 			// Register/L1 cache are precious resources on GPU, avoid storing unecessary AD type.

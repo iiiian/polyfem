@@ -78,6 +78,28 @@ namespace polyfem::assembler
 		return new_desc;
 	}
 
+	void AssemblyCache::clear()
+	{
+		desc_.clear();
+		basis_values_.clear();
+		basis_grad_x_.clear();
+		basis_grad_y_.clear();
+		basis_grad_z_.clear();
+		basis_grad_phy_x_.clear();
+		basis_grad_phy_y_.clear();
+		basis_grad_phy_z_.clear();
+		physical_x_.clear();
+		physical_y_.clear();
+		physical_z_.clear();
+		det_J_.clear();
+		J_inverse_transpose_.clear();
+		weighted_measure_.clear();
+
+#ifdef POLYFEM_WITH_CUDA
+		clear_device_storage();
+#endif
+	}
+
 	int AssemblyCache::append(bool is_mass, const AssemblyTempStorage &temp)
 	{
 		AssemblyCacheDesc new_desc = insert(is_mass, temp);

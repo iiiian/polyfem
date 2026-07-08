@@ -37,6 +37,152 @@ namespace polyfem::assembler
 		Range weighted_measure_range;
 	};
 
+	struct ElementAssemblyCacheView
+	{
+		bool is_empty = true;
+		bool is_mass = false;
+
+		Span<const double> basis_values;
+		Span<const double> basis_grad_x;
+		Span<const double> basis_grad_y;
+		Span<const double> basis_grad_z;
+		Span<const double> basis_grad_phy_x;
+		Span<const double> basis_grad_phy_y;
+		Span<const double> basis_grad_phy_z;
+		Span<const double> physical_x;
+		Span<const double> physical_y;
+		Span<const double> physical_z;
+		Span<const double> det_J;
+		Span<const double> J_inverse_transpose;
+		Span<const double> weighted_measure;
+
+		POLYFEM_BOTH int quad_num() const
+		{
+			return static_cast<int>(weighted_measure.size());
+		}
+
+		POLYFEM_BOTH double get_basis_value(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_values[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_x(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_grad_x[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_y(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_grad_y[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_z(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_grad_z[idx];
+		}
+
+		template <int dim>
+		POLYFEM_BOTH Eigen::Vector<double, dim> get_basis_grad(int local_basis_id, int quad_id) const
+		{
+			Eigen::Vector<double, dim> ret;
+			ret(0) = get_basis_grad_x(local_basis_id, quad_id);
+			if constexpr (dim > 1)
+			{
+				ret(1) = get_basis_grad_y(local_basis_id, quad_id);
+			}
+			if constexpr (dim > 2)
+			{
+				ret(2) = get_basis_grad_z(local_basis_id, quad_id);
+			}
+			return ret;
+		}
+
+		POLYFEM_BOTH double get_basis_grad_phy_x(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_grad_phy_x[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_phy_y(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_grad_phy_y[idx];
+		}
+
+		POLYFEM_BOTH double get_basis_grad_phy_z(int local_basis_id, int quad_id) const
+		{
+			int idx = local_basis_id * quad_num() + quad_id;
+			return basis_grad_phy_z[idx];
+		}
+
+		template <int dim>
+		POLYFEM_BOTH Eigen::Vector<double, dim> get_basis_grad_phy(int local_basis_id, int quad_id) const
+		{
+			Eigen::Vector<double, dim> ret;
+			ret(0) = get_basis_grad_phy_x(local_basis_id, quad_id);
+			if constexpr (dim > 1)
+			{
+				ret(1) = get_basis_grad_phy_y(local_basis_id, quad_id);
+			}
+			if constexpr (dim > 2)
+			{
+				ret(2) = get_basis_grad_phy_z(local_basis_id, quad_id);
+			}
+			return ret;
+		}
+
+		POLYFEM_BOTH double get_physical_x(int quad_id) const
+		{
+			return physical_x[quad_id];
+		}
+
+		POLYFEM_BOTH double get_physical_y(int quad_id) const
+		{
+			return physical_y[quad_id];
+		}
+
+		POLYFEM_BOTH double get_physical_z(int quad_id) const
+		{
+			return physical_z[quad_id];
+		}
+
+		template <int dim>
+		POLYFEM_BOTH Eigen::Vector<double, dim> get_physical(int quad_id) const
+		{
+			Eigen::Vector<double, dim> ret;
+			ret(0) = physical_x[quad_id];
+			if constexpr (dim > 1)
+			{
+				ret(1) = physical_y[quad_id];
+			}
+			if constexpr (dim > 2)
+			{
+				ret(2) = physical_z[quad_id];
+			}
+			return ret;
+		}
+
+		POLYFEM_BOTH double get_det_J(int quad_id) const
+		{
+			return det_J[quad_id];
+		}
+
+		POLYFEM_BOTH double get_weighted_measure(int quad_id) const
+		{
+			return weighted_measure[quad_id];
+		}
+
+		POLYFEM_BOTH Span<const double> get_J_inverse_transpose(int quad_id, int dim) const
+		{
+			int idx = quad_id * dim * dim;
+			return Span<const double>(J_inverse_transpose.data() + idx, dim * dim);
+		}
+	};
+
 	struct AssemblyCacheView
 	{
 		Span<const AssemblyCacheDesc> desc;
@@ -119,162 +265,25 @@ namespace polyfem::assembler
 		/// Layout inside each element: [ w(q0)det(J(q0)) w(q1)det(J(q1)) ... ].
 		Span<const double> weighted_measure;
 
-		POLYFEM_BOTH double get_basis_value(int element_id, int local_basis_id, int quad_id) const
+		POLYFEM_BOTH ElementAssemblyCacheView slice(int element_id) const
 		{
 			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_val_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_values[idx];
-		}
-
-		POLYFEM_BOTH double get_basis_grad_x(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_grad_x_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_grad_x[idx];
-		}
-
-		POLYFEM_BOTH double get_basis_grad_y(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_grad_y_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_grad_y[idx];
-		}
-
-		POLYFEM_BOTH double get_basis_grad_z(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_grad_z_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_grad_z[idx];
-		}
-
-		template <int dim>
-		POLYFEM_BOTH Eigen::Vector<double, dim> get_basis_grad(int element_id, int local_basis_id, int quad_id)
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			Eigen::Vector<double, dim> ret;
-
-			int idx = desc.basis_grad_x_range.offset + local_basis_id * quad_num + quad_id;
-			ret(0) = basis_grad_x[idx];
-			if constexpr (dim >= 1)
-			{
-				int idx = desc.basis_grad_y_range.offset + local_basis_id * quad_num + quad_id;
-				ret(1) = basis_grad_y[idx];
-			}
-			if constexpr (dim >= 2)
-			{
-				int idx = desc.basis_grad_z_range.offset + local_basis_id * quad_num + quad_id;
-				ret(2) = basis_grad_z[idx];
-			}
-			return ret;
-		}
-
-		POLYFEM_BOTH double get_basis_grad_phy_x(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_grad_phy_x_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_grad_phy_x[idx];
-		}
-
-		POLYFEM_BOTH double get_basis_grad_phy_y(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_grad_phy_y_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_grad_phy_y[idx];
-		}
-
-		POLYFEM_BOTH double get_basis_grad_phy_z(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			int idx = desc.basis_grad_phy_z_range.offset + local_basis_id * quad_num + quad_id;
-			return basis_grad_phy_z[idx];
-		}
-
-		template <int dim>
-		POLYFEM_BOTH Eigen::Vector<double, dim> get_basis_grad_phy(int element_id, int local_basis_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			int quad_num = desc.det_J_range.num;
-			Eigen::Vector<double, dim> ret;
-
-			int idx = desc.basis_grad_phy_x_range.offset + local_basis_id * quad_num + quad_id;
-			ret(0) = basis_grad_phy_x[idx];
-			if constexpr (dim >= 1)
-			{
-				int idx = desc.basis_grad_phy_y_range.offset + local_basis_id * quad_num + quad_id;
-				ret(1) = basis_grad_phy_y[idx];
-			}
-			if constexpr (dim >= 2)
-			{
-				int idx = desc.basis_grad_phy_z_range.offset + local_basis_id * quad_num + quad_id;
-				ret(2) = basis_grad_phy_z[idx];
-			}
-			return ret;
-		}
-
-		POLYFEM_BOTH double get_physical_x(int element_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			return physical_x[desc.physical_x_range.offset + quad_id];
-		}
-
-		POLYFEM_BOTH double get_physical_y(int element_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			return physical_y[desc.physical_y_range.offset + quad_id];
-		}
-
-		POLYFEM_BOTH double get_physical_z(int element_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			return physical_z[desc.physical_z_range.offset + quad_id];
-		}
-
-		template <int dim>
-		POLYFEM_BOTH Eigen::Vector<double, dim> get_physical(int element_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			Eigen::Vector<double, dim> ret;
-
-			int idx = desc.physical_x_range.offset + quad_id;
-			ret(0) = physical_x[idx];
-			if constexpr (dim >= 1)
-			{
-				int idx = desc.physical_y_range.offset + quad_id;
-				ret(1) = physical_y[idx];
-			}
-			if constexpr (dim >= 2)
-			{
-				int idx = desc.physical_z_range.offset + quad_id;
-				ret(2) = physical_z[idx];
-			}
-			return ret;
-		}
-
-		POLYFEM_BOTH double get_det_J(int element_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			return det_J[desc.det_J_range.offset + quad_id];
-		}
-
-		POLYFEM_BOTH double get_weighted_measure(int element_id, int quad_id) const
-		{
-			const auto &desc = this->desc[element_id];
-			return weighted_measure[desc.weighted_measure_range.offset + quad_id];
-		}
-
-		POLYFEM_BOTH Span<const double> get_J_inverse_transpose(int element_id, int quad_id, int dim) const
-		{
-			const auto &desc = this->desc[element_id];
-			int idx = desc.J_inverse_transpose_range.offset + quad_id * dim * dim;
-			return Span<const double>(J_inverse_transpose.data() + idx, dim * dim);
+			return ElementAssemblyCacheView{
+				desc.is_empty,
+				desc.is_mass,
+				slice_by_range(basis_values, desc.basis_val_range),
+				slice_by_range(basis_grad_x, desc.basis_grad_x_range),
+				slice_by_range(basis_grad_y, desc.basis_grad_y_range),
+				slice_by_range(basis_grad_z, desc.basis_grad_z_range),
+				slice_by_range(basis_grad_phy_x, desc.basis_grad_phy_x_range),
+				slice_by_range(basis_grad_phy_y, desc.basis_grad_phy_y_range),
+				slice_by_range(basis_grad_phy_z, desc.basis_grad_phy_z_range),
+				slice_by_range(physical_x, desc.physical_x_range),
+				slice_by_range(physical_y, desc.physical_y_range),
+				slice_by_range(physical_z, desc.physical_z_range),
+				slice_by_range(det_J, desc.det_J_range),
+				slice_by_range(J_inverse_transpose, desc.J_inverse_transpose_range),
+				slice_by_range(weighted_measure, desc.weighted_measure_range)};
 		}
 	};
 
@@ -347,6 +356,8 @@ namespace polyfem::assembler
 		AssemblyCacheDesc insert(bool is_mass, const AssemblyTempStorage &temp);
 
 	public:
+		void clear();
+
 		int append(bool is_mass, const AssemblyTempStorage &temp);
 		void update(int element_id, bool is_mass, const AssemblyTempStorage &temp);
 

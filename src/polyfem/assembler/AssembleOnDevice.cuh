@@ -177,6 +177,7 @@ namespace polyfem::assembler
 			if (elem_id < elem_num)
 			{
 				auto &cache_desc = cache.desc[elem_id];
+				ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
 				int quad_num = cache_desc.weighted_measure_range.num;
 
 				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
@@ -184,8 +185,8 @@ namespace polyfem::assembler
 					// Material is per cached quadrature point, matching weighted_measure.
 					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-					double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
-					scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
+					double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
+					scalar += local_scalar * elem_cache.get_weighted_measure(quad_id);
 				}
 			}
 
@@ -215,6 +216,7 @@ namespace polyfem::assembler
 			}
 
 			auto &cache_desc = cache.desc[elem_id];
+			ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
 			int quad_num = cache_desc.weighted_measure_range.num;
 			double scalar = 0.0; // local scalar value.
 
@@ -223,8 +225,8 @@ namespace polyfem::assembler
 				// Material is per cached quadrature point, matching weighted_measure.
 				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
-				scalar += local_scalar * cache.get_weighted_measure(elem_id, quad_id);
+				double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
+				scalar += local_scalar * elem_cache.get_weighted_measure(quad_id);
 			}
 
 			scalar_out[elem_id] += scalar;
@@ -255,6 +257,7 @@ namespace polyfem::assembler
 			int elem_id = task.elem_id;
 			int basis_id = task.local_i;
 			auto &cache_desc = cache.desc[elem_id];
+			ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
 			int quad_num = cache_desc.weighted_measure_range.num;
 			Vec grad_i = Vec::Zero(); // local vector.
 
@@ -265,8 +268,8 @@ namespace polyfem::assembler
 
 				Vec local_grad_i = Vec::Zero();
 				auto local_grad_i_span = Span<double>(local_grad_i.data(), local_grad_i.size());
-				VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, cache, material, unknown, local_grad_i_span);
-				grad_i += local_grad_i * cache.get_weighted_measure(elem_id, quad_id);
+				VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, elem_cache, material, unknown, local_grad_i_span);
+				grad_i += local_grad_i * elem_cache.get_weighted_measure(quad_id);
 			}
 
 			if (!grad_i.isZero())
@@ -290,8 +293,8 @@ namespace polyfem::assembler
 			using Material = typename MatrixKernel::Material;
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
 
-			const int task_num = static_cast<int>(tasks.size());
-			const int task_id = blockIdx.x * blockDim.x + threadIdx.x;
+			int task_num = static_cast<int>(tasks.size());
+			int task_id = blockIdx.x * blockDim.x + threadIdx.x;
 			if (task_id >= task_num)
 			{
 				return;
@@ -302,6 +305,7 @@ namespace polyfem::assembler
 			int bi = task.local_i;
 			int bj = task.local_j;
 			auto &cache_desc = cache.desc[elem_id];
+			ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
 			int quad_num = cache_desc.weighted_measure_range.num;
 			Mat hess_ij = Mat::Zero(); // local Hij block.
 
@@ -312,8 +316,8 @@ namespace polyfem::assembler
 
 				Mat local_hess_ij = Mat::Zero();
 				auto hess_ij_span = Span<double>(local_hess_ij.data(), local_hess_ij.size());
-				MatrixKernel::eval_matrix(elem_id, quad_id, bi, bj, bases, cache, material, unknown, hess_ij_span);
-				hess_ij += local_hess_ij * cache.get_weighted_measure(elem_id, quad_id);
+				MatrixKernel::eval_matrix(elem_id, quad_id, bi, bj, bases, elem_cache, material, unknown, hess_ij_span);
+				hess_ij += local_hess_ij * elem_cache.get_weighted_measure(quad_id);
 			}
 
 			if (!hess_ij.isZero())
@@ -352,11 +356,12 @@ namespace polyfem::assembler
 				}
 
 				auto &cache_desc = cache_view.desc[elem_id];
+				ElementAssemblyCacheView elem_cache = cache_view.slice(elem_id);
 				for (int q = 0; q < cache_desc.weighted_measure_range.num; ++q)
 				{
-					double x = cache_view.get_physical_x(elem_id, q);
-					double y = (dim >= 2) ? cache_view.get_physical_y(elem_id, q) : 0.0;
-					double z = (dim >= 3) ? cache_view.get_physical_z(elem_id, q) : 0.0;
+					double x = elem_cache.get_physical_x(q);
+					double y = (dim >= 2) ? elem_cache.get_physical_y(q) : 0.0;
+					double z = (dim >= 3) ? elem_cache.get_physical_z(q) : 0.0;
 					Material m = material_expr->eval_expr(x, y, z, 0, elem_id);
 
 					materials[cache_desc.weighted_measure_range.offset + q] = std::move(m);
@@ -483,7 +488,7 @@ namespace polyfem::assembler
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 		auto vector_tasks = detail::build_vector_tasks(bases);
-		const int task_num = static_cast<int>(vector_tasks.size());
+		int task_num = static_cast<int>(vector_tasks.size());
 		assert(static_cast<std::size_t>(task_num) == vector_tasks.size());
 		auto d_vector_tasks = cuda::make_buffer<detail::VectorAssemblyTask>(
 			p.stream,
@@ -492,14 +497,17 @@ namespace polyfem::assembler
 			cuda::no_init);
 		cuda::copy_bytes(p.stream, vector_tasks, d_vector_tasks);
 
-		int grad_num = div_round_up(task_num, 128);
-		detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream.get()>>>(
-			d_bases,
-			d_cache,
-			d_vector_tasks,
-			d_materials,
-			d_unknown,
-			vec_out);
+		if (task_num > 0)
+		{
+			int grid_num = div_round_up(task_num, 128);
+			detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream.get()>>>(
+				d_bases,
+				d_cache,
+				d_vector_tasks,
+				d_materials,
+				d_unknown,
+				vec_out);
+		}
 		p.stream.sync();
 	}
 
@@ -531,7 +539,7 @@ namespace polyfem::assembler
 		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(p.stream, unknown, d_unknown);
 		auto matrix_tasks = detail::build_matrix_tasks(bases);
-		const int task_num = static_cast<int>(matrix_tasks.size());
+		int task_num = static_cast<int>(matrix_tasks.size());
 		assert(static_cast<std::size_t>(task_num) == matrix_tasks.size());
 		auto d_matrix_tasks = cuda::make_buffer<detail::MatrixAssemblyTask>(
 			p.stream,
@@ -542,7 +550,7 @@ namespace polyfem::assembler
 
 		if (task_num > 0)
 		{
-			int grad_num = div_round_up(task_num, 128);
+			int grid_num = div_round_up(task_num, 128);
 			detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream.get()>>>(
 				d_bases,
 				d_cache,

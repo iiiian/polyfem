@@ -2,6 +2,7 @@ set(SOURCES
 	Assembler.cpp
 	Assembler.hpp
 	AssemblerData.hpp
+	AssembleOnHost.hpp
 	AssemblerUtils.cpp
 	AssemblerUtils.hpp
 	AssemblyValues.hpp
