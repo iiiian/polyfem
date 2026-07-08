@@ -103,7 +103,7 @@ namespace polyfem
 				auto sample_y = Span<const double>(samples.col(1).data(), n_points);
 				basis_values(
 					basis_desc,
-					bases.basis.view(),
+					bases.basis_store.view(),
 					sample_x,
 					sample_y,
 					{},
@@ -147,7 +147,7 @@ namespace polyfem
 							node_positions.push_back(entry.node(d));
 					}
 
-					const int mapping_id = bases.dof_mapping.append(node_ids, weights, node_positions);
+					const int mapping_id = bases.dof_mapping_store.append(node_ids, weights, node_positions);
 					if (j == 0)
 						first_mapping_id = mapping_id;
 				}
@@ -807,9 +807,9 @@ namespace polyfem
 				auto &element_desc = bases.element_desc[e];
 				Quadrature quad;
 				QuadQuadrature{}.get_quadrature(real_order, quad);
-				element_desc.quadrature_desc = bases.quadrature.append(quad);
+				element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 				QuadQuadrature{}.get_quadrature(real_mass_order, quad);
-				element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+				element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
 					Eigen::VectorXi res(3);
@@ -859,7 +859,7 @@ namespace polyfem
 				basis_desc.orderq = 2;
 				basis_desc.dim = 2;
 				basis_desc.basis_num = 9;
-				basis_desc.eval_callback_id = bases.basis.append_eval_callback(make_spline_eval_callback(h_knots, v_knots));
+				basis_desc.eval_callback_id = bases.basis_store.append_eval_callback(make_spline_eval_callback(h_knots, v_knots));
 				basis_desc.is_parametric = is_parametric;
 				basis_desc.is_bernstein = false;
 
@@ -885,9 +885,9 @@ namespace polyfem
 				auto &element_desc = bases.element_desc[e];
 				Quadrature quad;
 				QuadQuadrature{}.get_quadrature(real_order, quad);
-				element_desc.quadrature_desc = bases.quadrature.append(quad);
+				element_desc.quadrature_desc = bases.quadrature_store.append(quad);
 				QuadQuadrature{}.get_quadrature(real_mass_order, quad);
-				element_desc.mass_quadrature_desc = bases.mass_quadrature.append(quad);
+				element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
 				auto &basis_desc = element_desc.basis_desc;
 				basis_desc.element_kind = ElementKind::Quad;
