@@ -1,6 +1,8 @@
 set(SOURCES
 	Basis.cpp
 	Basis.hpp
+	ElementBases.cpp
+	ElementBases.hpp
 	EvalBasis.cpp
 	EvalBasis.hpp
 	EvalLagrangeBasis.cpp

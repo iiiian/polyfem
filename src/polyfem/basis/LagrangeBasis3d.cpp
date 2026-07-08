@@ -1261,7 +1261,7 @@ namespace
 
 	template <typename Derived>
 	Eigen::VectorXd evaluate_lagrange_basis_values(
-		const assembler::ElementBases &bases,
+		const assembler::AssemblyEssentials &bases,
 		const int element_id,
 		const Eigen::MatrixBase<Derived> &local_position)
 	{
@@ -2409,7 +2409,7 @@ int LagrangeBasis3d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	assembler::ElementBases &bases,
+	assembler::AssemblyEssentials &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_face_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -2435,7 +2435,7 @@ int LagrangeBasis3d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	assembler::ElementBases &bases,
+	assembler::AssemblyEssentials &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_face_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -2529,7 +2529,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.order = serendipity ? -2 : discr_order;
 			basis_desc.orderq = basis_desc.order;
 			basis_desc.dim = 3;
-			basis_desc.basis_num = 1; // TODO
+			basis_desc.basis_num = n_el_bases;
 			basis_desc.eval_callback_id = -1;
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
@@ -2568,7 +2568,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.order = discr_order;
 			basis_desc.orderq = basis_desc.order;
 			basis_desc.dim = 3;
-			basis_desc.basis_num = 1; // TODO
+			basis_desc.basis_num = n_el_bases;
 			basis_desc.eval_callback_id = -1;
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
@@ -2607,7 +2607,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.order = discr_order;
 			basis_desc.orderq = discr_orderq;
 			basis_desc.dim = 3;
-			basis_desc.basis_num = 1; // TODO
+			basis_desc.basis_num = n_el_bases;
 			basis_desc.eval_callback_id = -1;
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = false;
@@ -2643,7 +2643,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.order = discr_order;
 			basis_desc.orderq = basis_desc.order;
 			basis_desc.dim = 3;
-			basis_desc.basis_num = 1; // TODO
+			basis_desc.basis_num = n_el_bases;
 			basis_desc.eval_callback_id = -1;
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = false;

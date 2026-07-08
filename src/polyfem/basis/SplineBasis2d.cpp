@@ -92,7 +92,7 @@ namespace polyfem
 				};
 			}
 
-			Eigen::MatrixXd evaluate_basis_values(const assembler::ElementBases &bases, const int element_id, const Eigen::MatrixXd &samples)
+			Eigen::MatrixXd evaluate_basis_values(const assembler::AssemblyEssentials &bases, const int element_id, const Eigen::MatrixXd &samples)
 			{
 				const BasisDesc basis_desc = bases.element_desc[element_id].basis_desc;
 				const int n_points = samples.rows();
@@ -125,7 +125,7 @@ namespace polyfem
 				return true;
 			}
 
-			void append_dof_mappings(const int element_id, const int dim, const LocalDofMappings &mappings, assembler::ElementBases &bases)
+			void append_dof_mappings(const int element_id, const int dim, const LocalDofMappings &mappings, assembler::AssemblyEssentials &bases)
 			{
 				if (mappings.empty())
 					return;
@@ -672,7 +672,7 @@ namespace polyfem
 					vec.push_back(data);
 			}
 
-			void assign_q2_weights(const Mesh2D &mesh, const int el_index, const assembler::ElementBases &bases, std::vector<LocalDofMappings> &element_dof_mappings)
+			void assign_q2_weights(const Mesh2D &mesh, const int el_index, const assembler::AssemblyEssentials &bases, std::vector<LocalDofMappings> &element_dof_mappings)
 			{
 				Navigation::Index index = mesh.get_index_from_face(el_index);
 				auto &b = element_dof_mappings[el_index];
@@ -770,7 +770,7 @@ namespace polyfem
 
 		int SplineBasis2d::build_bases(const Mesh2D &mesh,
 									   const std::string &assembler,
-									   const int quadrature_order, const int mass_quadrature_order, assembler::ElementBases &bases, std::vector<LocalBoundary> &local_boundary, std::map<int, InterfaceData> &poly_edge_to_data)
+									   const int quadrature_order, const int mass_quadrature_order, assembler::AssemblyEssentials &bases, std::vector<LocalBoundary> &local_boundary, std::map<int, InterfaceData> &poly_edge_to_data)
 		{
 			assert(!mesh.is_volume());
 
@@ -808,12 +808,13 @@ namespace polyfem
 				Quadrature quad;
 				QuadQuadrature{}.get_quadrature(real_order, quad);
 				element_desc.quadrature_desc = bases.quadrature_store.append(quad);
-				QuadQuadrature{}.get_quadrature(real_mass_order, quad);
-				element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
+					QuadQuadrature{}.get_quadrature(real_mass_order, quad);
+					element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
-				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
-					Eigen::VectorXi res(3);
-					const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
+					const bool is_parametric = !mesh.is_polytope(e);
+					bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
+						Eigen::VectorXi res(3);
+						const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 					auto index = mesh2d.get_index_from_face(e);
 					int le;
 					for (le = 0; le < mesh2d.n_face_vertices(e); ++le)
@@ -878,6 +879,7 @@ namespace polyfem
 			{
 				if (mesh.is_polytope(e) || mesh.is_spline_compatible(e))
 					continue;
+				const bool is_parametric = !mesh.is_polytope(e);
 
 				const int real_order = quadrature_order > 0 ? quadrature_order : AssemblerUtils::quadrature_order(assembler, 2, AssemblerUtils::BasisType::CUBE_LAGRANGE, 2);
 				const int real_mass_order = mass_quadrature_order > 0 ? mass_quadrature_order : AssemblerUtils::quadrature_order("Mass", 2, AssemblerUtils::BasisType::CUBE_LAGRANGE, 2);
@@ -895,7 +897,7 @@ namespace polyfem
 				basis_desc.order = 2;
 				basis_desc.orderq = 2;
 				basis_desc.dim = 2;
-				basis_desc.basis_num = 1; // TODO
+				basis_desc.basis_num = 9;
 				basis_desc.eval_callback_id = -1;
 				basis_desc.is_parametric = is_parametric;
 				basis_desc.is_bernstein = false;
@@ -961,7 +963,7 @@ namespace polyfem
 			return n_bases;
 		}
 
-		void SplineBasis2d::fit_nodes(const Mesh2D &mesh, const int n_bases, assembler::ElementBases &gbases)
+		void SplineBasis2d::fit_nodes(const Mesh2D &mesh, const int n_bases, assembler::AssemblyEssentials &gbases)
 		{
 			(void)mesh;
 			(void)n_bases;

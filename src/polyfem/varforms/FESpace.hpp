@@ -1,6 +1,7 @@
 #pragma once
 
 #include <polyfem/assembler/AssemblyValsCache.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/basis/ElementBases.hpp>
 #include <polyfem/basis/InterfaceData.hpp>
 #include <polyfem/mesh/LocalBoundary.hpp>
@@ -27,7 +28,10 @@ namespace polyfem::varform
 		int n_bases = 0;
 
 		/// Per-element scalar bases used to interpolate physical coordinates.
-		std::shared_ptr<std::vector<basis::ElementBases>> bases;
+		std::shared_ptr<assembler::AssemblyEssentials> assembly;
+
+		/// Deprecated compatibility view of assembly.
+		mutable std::shared_ptr<std::vector<basis::ElementBases>> bases;
 
 		/// Polynomial degree of the geometry mapping on each mesh element.
 		Eigen::VectorXi disc_orders;
@@ -46,6 +50,7 @@ namespace polyfem::varform
 		void reset()
 		{
 			n_bases = 0;
+			assembly = nullptr;
 			bases = nullptr;
 			disc_orders.resize(0);
 			polys.clear();
@@ -65,7 +70,10 @@ namespace polyfem::varform
 		int n_bases = 0;
 
 		/// Per-element basis data.
-		std::shared_ptr<std::vector<basis::ElementBases>> bases;
+		std::shared_ptr<assembler::AssemblyEssentials> assembly;
+
+		/// Deprecated compatibility view of assembly.
+		mutable std::shared_ptr<std::vector<basis::ElementBases>> bases;
 
 		/// Primary polynomial degree for each mesh element.
 		Eigen::VectorXi disc_orders;
@@ -108,6 +116,8 @@ namespace polyfem::varform
 
 		const std::vector<basis::ElementBases> &basis_list() const
 		{
+			if (!bases && assembly)
+				bases = assembly->legacy_bases_ptr();
 			assert(bases);
 			return *bases;
 		}
@@ -115,6 +125,8 @@ namespace polyfem::varform
 		const std::vector<basis::ElementBases> &geometry_basis_list() const
 		{
 			assert(geometry);
+			if (!geometry->bases && geometry->assembly)
+				geometry->bases = geometry->assembly->legacy_bases_ptr();
 			assert(geometry->bases);
 			return *geometry->bases;
 		}
@@ -123,6 +135,7 @@ namespace polyfem::varform
 		{
 			value_dim = 1;
 			n_bases = 0;
+			assembly = nullptr;
 			bases = nullptr;
 			disc_orders.resize(0);
 			disc_ordersq.resize(0);
@@ -140,6 +153,7 @@ namespace polyfem::varform
 	inline void GeometryMapping::init_from_fe_space(const FESpace &space)
 	{
 		n_bases = space.n_bases;
+		assembly = space.assembly;
 		bases = space.bases;
 		disc_orders = space.disc_orders;
 		polys = space.polys;

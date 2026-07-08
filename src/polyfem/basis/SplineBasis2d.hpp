@@ -2,7 +2,7 @@
 
 #include <polyfem/mesh/mesh2D/CMesh2D.hpp>
 #include <polyfem/mesh/mesh2D/NCMesh2D.hpp>
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/mesh/LocalBoundary.hpp>
 
 #include <polyfem/basis/InterfaceData.hpp>
@@ -23,11 +23,11 @@ namespace polyfem
 				const std::string &assembler,
 				const int quadrature_order,
 				const int mass_quadrature_order,
-				assembler::ElementBases &bases,
+				assembler::AssemblyEssentials &bases,
 				std::vector<mesh::LocalBoundary> &local_boundary,
 				std::map<int, InterfaceData> &poly_edge_to_data);
 
-			static void fit_nodes(const mesh::Mesh2D &mesh, const int n_bases, assembler::ElementBases &gbases);
+			static void fit_nodes(const mesh::Mesh2D &mesh, const int n_bases, assembler::AssemblyEssentials &gbases);
 		};
 	} // namespace basis
 } // namespace polyfem

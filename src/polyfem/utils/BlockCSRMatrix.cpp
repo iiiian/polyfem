@@ -204,7 +204,7 @@ namespace polyfem
 		{
 			d_row_ptr_ = cuda::make_buffer<int>(p.stream, p.mr, row_ptr_.size(), cuda::no_init);
 			d_col_idx_ = cuda::make_buffer<int>(p.stream, p.mr, col_idx_.size(), cuda::no_init);
-			d_values_ = cuda::make_buffer<double>(p.stream, p.mr, value_size_, 0.0);
+			d_values_ = cuda::make_buffer<double>(p.stream, p.mr, value_size_, cuda::no_init);
 
 			cuda::copy_bytes(p.stream, row_ptr_, *d_row_ptr_);
 			cuda::copy_bytes(p.stream, col_idx_, *d_col_idx_);

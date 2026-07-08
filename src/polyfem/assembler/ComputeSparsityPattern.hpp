@@ -1,13 +1,13 @@
 #pragma once
 
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/utils/BlockCSRMatrix.hpp>
 
 namespace polyfem::assembler
 {
 
 	BSRSparsityPattern compute_sparsity_pattern(
-		const ElementBasesView &bases,
+		const AssemblyEssentialsView &bases,
 		int node_num,
 		int block_dim);
 

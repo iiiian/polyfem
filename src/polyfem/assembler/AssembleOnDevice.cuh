@@ -2,7 +2,7 @@
 
 #include <polyfem/materials/MaterialExprRegistry.hpp>
 #include <polyfem/assembler/AssemblyCache.hpp>
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/utils/CUDAExecutionPolicy.hpp>
 #include <polyfem/utils/MaybeParallelFor.hpp>
 #include <polyfem/utils/BlockCSRMatrix.hpp>
@@ -44,7 +44,7 @@ namespace polyfem::assembler
 			int local_j;
 		};
 
-		inline std::vector<VectorAssemblyTask> build_vector_tasks(const ElementBases &bases)
+		inline std::vector<VectorAssemblyTask> build_vector_tasks(const AssemblyEssentials &bases)
 		{
 			int task_num = 0;
 			for (const ElementDesc &elem_desc : bases.element_desc)
@@ -66,7 +66,7 @@ namespace polyfem::assembler
 			return tasks;
 		}
 
-		inline std::vector<MatrixAssemblyTask> build_matrix_tasks(const ElementBases &bases)
+		inline std::vector<MatrixAssemblyTask> build_matrix_tasks(const AssemblyEssentials &bases)
 		{
 			int task_num = 0;
 			for (const ElementDesc &elem_desc : bases.element_desc)
@@ -96,7 +96,7 @@ namespace polyfem::assembler
 			int elem_id,
 			int local_i,
 			int local_j,
-			ElementBasesView bases,
+			AssemblyEssentialsView bases,
 			Span<const double> local_mat,
 			BSRMatrixMutableView global_mat)
 		{
@@ -134,7 +134,7 @@ namespace polyfem::assembler
 		__device__ void scatter_vec_i(
 			int elem_id,
 			int local_i,
-			ElementBasesView bases,
+			AssemblyEssentialsView bases,
 			Span<const double> local_vec,
 			Span<double> global_vec)
 		{
@@ -161,7 +161,7 @@ namespace polyfem::assembler
 
 		template <typename ScalarKernel, int BLOCK_SIZE>
 		__global__ void assemble_scalar_kernel(
-			ElementBasesView bases,
+			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			int elem_num,
 			Span<const typename ScalarKernel::Material> materials,
@@ -201,7 +201,7 @@ namespace polyfem::assembler
 
 		template <typename ScalarKernel>
 		__global__ void assemble_scalar_per_element_kernel(
-			ElementBasesView bases,
+			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const typename ScalarKernel::Material> materials,
 			Span<const double> unknown,
@@ -234,7 +234,7 @@ namespace polyfem::assembler
 
 		template <typename VectorKernel>
 		__global__ void assemble_vector_kernel(
-			ElementBasesView bases,
+			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const VectorAssemblyTask> tasks,
 			Span<const typename VectorKernel::Material> materials,
@@ -283,7 +283,7 @@ namespace polyfem::assembler
 
 		template <typename MatrixKernel>
 		__global__ void assemble_matrix_kernel(
-			ElementBasesView bases,
+			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const MatrixAssemblyTask> tasks,
 			Span<const typename MatrixKernel::Material> materials,
@@ -339,7 +339,7 @@ namespace polyfem::assembler
 
 		template <typename Material, int dim>
 		cuda::device_buffer<Material> prepare_materials(
-			const ElementBases &bases,
+			const AssemblyEssentials &bases,
 			const AssemblyCache &cache,
 			const material::MaterialExprRegistry &material_registry,
 			CudaExecutionPolicy policy)
@@ -381,7 +381,7 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	double assemble_scalar(
-		ElementBases &bases,
+		AssemblyEssentials &bases,
 		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
@@ -424,7 +424,7 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	void assemble_scalar_per_element(
-		ElementBases &bases,
+		AssemblyEssentials &bases,
 		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
@@ -467,7 +467,7 @@ namespace polyfem::assembler
 
 	template <typename VectorKernel>
 	void assemble_vector(
-		ElementBases &bases,
+		AssemblyEssentials &bases,
 		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
@@ -519,7 +519,7 @@ namespace polyfem::assembler
 
 	template <typename MatrixKernel>
 	void assemble_matrix(
-		ElementBases &bases,
+		AssemblyEssentials &bases,
 		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,

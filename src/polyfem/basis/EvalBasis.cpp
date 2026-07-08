@@ -24,6 +24,7 @@ namespace polyfem::basis
 			return desc.basis_num;
 		}
 		assert(false);
+		return 0;
 	}
 
 	POLYFEM_BOTH void basis_values_single(

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 
 namespace polyfem::assembler
 {
 
 	template <int dim>
 	void compute_geometry_positions(
-		const ElementBasesView &geom_bases,
+		const AssemblyEssentialsView &geom_bases,
 		int element_id,
 		Span<const double> x,
 		Span<const double> y,
@@ -19,7 +19,7 @@ namespace polyfem::assembler
 
 	template <int dim>
 	void compute_geometry_mapping(
-		const ElementBasesView &geom_bases,
+		const AssemblyEssentialsView &geom_bases,
 		int element_id,
 		Span<const double> x,
 		Span<const double> y,

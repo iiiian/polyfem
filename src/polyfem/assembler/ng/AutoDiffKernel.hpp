@@ -1,7 +1,7 @@
 #pragma once
 
 #include <polyfem/assembler/AssemblyCache.hpp>
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/utils/CudaBoth.hpp>
 #include <polyfem/utils/AutoDiff.hpp>
 
@@ -27,7 +27,7 @@ namespace polyfem::assembler
 		POLYFEM_BOTH Eigen::Vector<double, value_dim> get_local_node_unknown(
 			int elem_id,
 			int local_node_id,
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			Span<const double> unknown)
 		{
 			using Vec = Eigen::Vector<double, value_dim>;
@@ -67,7 +67,7 @@ namespace polyfem::assembler
 		POLYFEM_BOTH static double eval_scalar(
 			int elem_id,
 			int quad_id,
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
 			Span<const double> unknown)
@@ -127,7 +127,7 @@ namespace polyfem::assembler
 			int elem_id,
 			int quad_id,
 			int local_i,
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
 			Span<const double> unknown,
@@ -230,7 +230,7 @@ namespace polyfem::assembler
 			int quad_id,
 			int local_i,
 			int local_j,
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
 			Span<const double> unknown,

@@ -12,10 +12,16 @@ set(SOURCES
 	Bilaplacian.hpp
   AssemblyCache.cpp
 	AssemblyCache.hpp
+	AssemblyEssentials.cpp
+	AssemblyEssentials.hpp
+	AssemblyValsCache.cpp
+	AssemblyValsCache.hpp
 	ComputeAssemblyCache.cpp
 	ComputeAssemblyCache.hpp
 	ComputeSparsityPattern.cpp
 	ComputeSparsityPattern.hpp
+	ElementAssemblyValues.cpp
+	ElementAssemblyValues.hpp
 	GeometryMapping.cpp
 	GeometryMapping.hpp
 	GenericElastic.cpp
@@ -89,7 +95,6 @@ set(SOURCES
   DofMappingStore.hpp
   DofMappingStore.cpp
   ElementBases.hpp
-  ElementBases.cpp
 )
 
 if(POLYFEM_WITH_CUDA)

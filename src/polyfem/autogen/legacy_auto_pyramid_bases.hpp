@@ -1,6 +1,7 @@
 #pragma once
 
 #include "auto_pyramid_bases.hpp"
+#include "auto_pyramid_bases_nodes.hpp"
 #include <Eigen/Dense>
 
 namespace polyfem {

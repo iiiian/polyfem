@@ -1,7 +1,7 @@
 #pragma once
 
 #include <polyfem/assembler/AssemblyCache.hpp>
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 
 namespace polyfem::assembler
 {
@@ -16,8 +16,8 @@ namespace polyfem::assembler
 	/// @param temp Reusable temporary storage / assembly cache output.
 	template <int dim>
 	void compute_assembly_cache_single(
-		const ElementBasesView &bases,
-		const ElementBasesView &geom_bases,
+		const AssemblyEssentialsView &bases,
+		const AssemblyEssentialsView &geom_bases,
 		int element_id,
 		bool is_mass,
 		AssemblyTempStorage &temp);
@@ -28,8 +28,8 @@ namespace polyfem::assembler
 	/// @param geom_bases Geometry basis data.
 	/// @param is_mass True for mass matrix assembler.
 	AssemblyCache compute_assembly_cache_batched(
-		const ElementBasesView &bases,
-		const ElementBasesView &geom_bases,
+		const AssemblyEssentialsView &bases,
+		const AssemblyEssentialsView &geom_bases,
 		bool is_mass);
 
 } // namespace polyfem::assembler

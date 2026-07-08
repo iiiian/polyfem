@@ -3,7 +3,7 @@
 #include <polyfem/materials/MaterialExprRegistry.hpp>
 #include <polyfem/assembler/AssemblyCache.hpp>
 #include <polyfem/assembler/ComputeAssemblyCache.hpp>
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/utils/BlockCSRMatrix.hpp>
 #include <polyfem/utils/MaybeParallelFor.hpp>
 #include <polyfem/utils/Span.hpp>
@@ -82,8 +82,8 @@ namespace polyfem::assembler
 
 		template <int dim>
 		ElementAssemblyCacheView compute_element_cache(
-			const ElementBasesView &bases,
-			const ElementBasesView &geom_bases,
+			const AssemblyEssentialsView &bases,
+			const AssemblyEssentialsView &geom_bases,
 			int element_id,
 			AssemblyTempStorage &temp,
 			AssemblyCache &temp_cache)
@@ -96,8 +96,8 @@ namespace polyfem::assembler
 		}
 
 		inline ElementAssemblyCacheView element_cache_view(
-			const ElementBasesView &bases,
-			const ElementBasesView &geom_bases,
+			const AssemblyEssentialsView &bases,
+			const AssemblyEssentialsView &geom_bases,
 			AssemblyCacheView cache,
 			int element_id,
 			AssemblyTempStorage &temp,
@@ -152,7 +152,7 @@ namespace polyfem::assembler
 
 		template <typename ScalarKernel>
 		double assemble_element_scalar(
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			ElementAssemblyCacheView cache,
 			const material::MaterialExprRegistry &material_registry,
 			Span<const double> unknown,
@@ -175,7 +175,7 @@ namespace polyfem::assembler
 
 		template <typename VectorKernel>
 		void assemble_element_vector(
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			ElementAssemblyCacheView cache,
 			const material::MaterialExprRegistry &material_registry,
 			Span<const double> unknown,
@@ -222,7 +222,7 @@ namespace polyfem::assembler
 
 		template <typename MatrixKernel>
 		void assemble_element_matrix(
-			const ElementBasesView &bases,
+			const AssemblyEssentialsView &bases,
 			ElementAssemblyCacheView cache,
 			const material::MaterialExprRegistry &material_registry,
 			Span<const double> unknown,
@@ -375,15 +375,15 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	double assemble_scalar(
-		const ElementBases &bases,
-		const ElementBases &geom_bases,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		double time = 0.0)
 	{
-		const ElementBasesView bases_view = bases.view();
-		const ElementBasesView geom_bases_view = geom_bases.view();
+		const AssemblyEssentialsView bases_view = bases.view();
+		const AssemblyEssentialsView geom_bases_view = geom_bases.view();
 		const AssemblyCacheView cache_view = cache.view();
 		int element_num = static_cast<int>(bases.element_desc.size());
 		host_detail::assert_cache_compatible(element_num, cache_view);
@@ -421,16 +421,16 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	void assemble_scalar_per_element(
-		const ElementBases &bases,
-		const ElementBases &geom_bases,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> scalar_out,
 		double time = 0.0)
 	{
-		const ElementBasesView bases_view = bases.view();
-		const ElementBasesView geom_bases_view = geom_bases.view();
+		const AssemblyEssentialsView bases_view = bases.view();
+		const AssemblyEssentialsView geom_bases_view = geom_bases.view();
 		const AssemblyCacheView cache_view = cache.view();
 		int element_num = static_cast<int>(bases.element_desc.size());
 		assert(scalar_out.size() == element_num);
@@ -461,8 +461,8 @@ namespace polyfem::assembler
 
 	template <typename VectorKernel>
 	void assemble_vector(
-		const ElementBases &bases,
-		const ElementBases &geom_bases,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
@@ -472,8 +472,8 @@ namespace polyfem::assembler
 	{
 		constexpr int VALUE_DIM = VectorKernel::VALUE_DIM;
 
-		const ElementBasesView bases_view = bases.view();
-		const ElementBasesView geom_bases_view = geom_bases.view();
+		const AssemblyEssentialsView bases_view = bases.view();
+		const AssemblyEssentialsView geom_bases_view = geom_bases.view();
 		const AssemblyCacheView cache_view = cache.view();
 		int element_num = static_cast<int>(bases.element_desc.size());
 		host_detail::assert_cache_compatible(element_num, cache_view);
@@ -523,8 +523,8 @@ namespace polyfem::assembler
 
 	template <typename MatrixKernel>
 	void assemble_matrix(
-		const ElementBases &bases,
-		const ElementBases &geom_bases,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
@@ -536,8 +536,8 @@ namespace polyfem::assembler
 		constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
 		assert(matrix_out.block_dim == VALUE_DIM);
 
-		const ElementBasesView bases_view = bases.view();
-		const ElementBasesView geom_bases_view = geom_bases.view();
+		const AssemblyEssentialsView bases_view = bases.view();
+		const AssemblyEssentialsView geom_bases_view = geom_bases.view();
 		const AssemblyCacheView cache_view = cache.view();
 		int element_num = static_cast<int>(bases.element_desc.size());
 		host_detail::assert_cache_compatible(element_num, cache_view);

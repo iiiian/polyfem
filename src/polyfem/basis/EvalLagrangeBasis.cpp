@@ -30,10 +30,15 @@ namespace polyfem::basis
 		case ElementKind::Simplex:
 		{
 			if (desc.dim == 2)
+			{
 				return autogen::p_basis_count_2d(desc.order);
+			}
 			if (desc.dim == 3)
+			{
 				return autogen::p_basis_count_3d(desc.order);
+			}
 			assert(false);
+			return 0;
 		}
 		case ElementKind::Quad:
 		{
@@ -53,6 +58,7 @@ namespace polyfem::basis
 		default:
 			assert(false);
 		}
+		return 0;
 	}
 
 	POLYFEM_BOTH void lagrange_basis_values_single(

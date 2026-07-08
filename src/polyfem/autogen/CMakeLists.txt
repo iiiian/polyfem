@@ -74,7 +74,7 @@ set(SOURCES
 	auto_triangle.ipp
 )
 add_library(lib_n_bases ${N_BASES})
-target_include_directories(lib_n_bases PRIVATE ${PROJECT_BINARY_DIR}/include)
+target_include_directories(lib_n_bases PRIVATE ${PROJECT_BINARY_DIR}/include ${POLYFEM_INCLUDE_DIR})
 
 target_link_libraries(lib_n_bases PRIVATE Eigen3::Eigen)
 
@@ -84,7 +84,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${AU
 
 
 add_library(polyfem_autogen ${AUTOGEN_BASES})
-target_include_directories(polyfem_autogen PRIVATE ${PROJECT_BINARY_DIR}/include)
+target_include_directories(polyfem_autogen PRIVATE ${PROJECT_BINARY_DIR}/include ${POLYFEM_INCLUDE_DIR})
 target_link_libraries(polyfem_autogen PRIVATE Eigen3::Eigen lib_n_bases)
 
 if(POLYFEM_WITH_CUDA)

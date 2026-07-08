@@ -6,7 +6,7 @@ namespace polyfem::assembler
 {
 
 	BSRSparsityPattern compute_sparsity_pattern(
-		const ElementBasesView &bases,
+		const AssemblyEssentialsView &bases,
 		int node_num,
 		int block_dim)
 	{

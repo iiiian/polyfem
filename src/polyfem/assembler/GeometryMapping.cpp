@@ -34,7 +34,7 @@ namespace polyfem::assembler
 
 		template <int dim>
 		Eigen::Vector<double, dim> basis_node_position(
-			const ElementBasesView &geom_bases,
+			const AssemblyEssentialsView &geom_bases,
 			const ElementDesc &geom_elem_desc,
 			int local_basis_id)
 		{
@@ -85,7 +85,7 @@ namespace polyfem::assembler
 
 	template <int dim>
 	void compute_geometry_positions(
-		const ElementBasesView &geom_bases,
+		const AssemblyEssentialsView &geom_bases,
 		int element_id,
 		Span<const double> x,
 		Span<const double> y,
@@ -136,7 +136,7 @@ namespace polyfem::assembler
 
 	template <int dim>
 	void compute_geometry_mapping(
-		const ElementBasesView &geom_bases,
+		const AssemblyEssentialsView &geom_bases,
 		int element_id,
 		Span<const double> x,
 		Span<const double> y,
@@ -221,12 +221,12 @@ namespace polyfem::assembler
 		}
 	}
 
-	template void compute_geometry_positions<1>(const ElementBasesView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>);
-	template void compute_geometry_positions<2>(const ElementBasesView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>);
-	template void compute_geometry_positions<3>(const ElementBasesView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>);
+	template void compute_geometry_positions<1>(const AssemblyEssentialsView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>);
+	template void compute_geometry_positions<2>(const AssemblyEssentialsView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>);
+	template void compute_geometry_positions<3>(const AssemblyEssentialsView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>);
 
-	template void compute_geometry_mapping<1>(const ElementBasesView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>);
-	template void compute_geometry_mapping<2>(const ElementBasesView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>);
-	template void compute_geometry_mapping<3>(const ElementBasesView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>);
+	template void compute_geometry_mapping<1>(const AssemblyEssentialsView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>);
+	template void compute_geometry_mapping<2>(const AssemblyEssentialsView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>);
+	template void compute_geometry_mapping<3>(const AssemblyEssentialsView &, int, Span<const double>, Span<const double>, Span<const double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>, Span<double>);
 
 } // namespace polyfem::assembler

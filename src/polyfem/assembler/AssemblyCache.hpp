@@ -3,7 +3,7 @@
 #include <polyfem/utils/Range.hpp>
 #include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/CudaBoth.hpp>
-#include <polyfem/assembler/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 
 #include <vector>
 

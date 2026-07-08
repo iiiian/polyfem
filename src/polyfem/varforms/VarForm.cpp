@@ -347,7 +347,7 @@ namespace polyfem::varform
 
 		space.value_dim = value_dim;
 
-		space.bases = std::make_shared<std::vector<basis::ElementBases>>();
+		space.assembly = std::make_shared<assembler::AssemblyEssentials>();
 		space.geometry = build_geom_mapping ? std::make_shared<GeometryMapping>() : std::move(geometry);
 		assert(space.geometry);
 
@@ -365,7 +365,7 @@ namespace polyfem::varform
 			else
 				geom_disc_orders = mesh.orders();
 
-			space.geometry->bases = std::make_shared<std::vector<basis::ElementBases>>();
+			space.geometry->assembly = std::make_shared<assembler::AssemblyEssentials>();
 			space.geometry->disc_orders = geom_disc_orders;
 		}
 
@@ -389,7 +389,7 @@ namespace polyfem::varform
 			{
 				space.n_bases = basis::SplineBasis3d::build_bases(
 					tmp_mesh, space_assembler_name, quadrature_order, mass_quadrature_order,
-					*space.bases, boundary.local_boundary, space.poly_edge_to_data);
+					*space.assembly, boundary.local_boundary, space.poly_edge_to_data);
 			}
 			else
 			{
@@ -398,7 +398,7 @@ namespace polyfem::varform
 						tmp_mesh, space_assembler_name, quadrature_order, mass_quadrature_order,
 						geom_disc_orders, geom_disc_ordersq, false, false, has_polys,
 						!use_continuous_gbasis, use_corner_quadrature,
-						*space.geometry->bases, boundary.local_boundary, poly_edge_to_data_geom,
+						*space.geometry->assembly, boundary.local_boundary, poly_edge_to_data_geom,
 						space.geometry->mesh_nodes);
 
 				space.n_bases = basis::LagrangeBasis3d::build_bases(
@@ -407,7 +407,7 @@ namespace polyfem::varform
 					basis_type == "Bernstein",
 					basis_type == "Serendipity",
 					has_polys, false, use_corner_quadrature,
-					*space.bases, boundary.local_boundary, space.poly_edge_to_data, space.mesh_nodes);
+					*space.assembly, boundary.local_boundary, space.poly_edge_to_data, space.mesh_nodes);
 			}
 		}
 		else
@@ -418,7 +418,7 @@ namespace polyfem::varform
 			{
 				space.n_bases = basis::SplineBasis2d::build_bases(
 					tmp_mesh, space_assembler_name, quadrature_order, mass_quadrature_order,
-					*space.bases, boundary.local_boundary, space.poly_edge_to_data);
+					*space.assembly, boundary.local_boundary, space.poly_edge_to_data);
 			}
 			else
 			{
@@ -427,7 +427,7 @@ namespace polyfem::varform
 						tmp_mesh, space_assembler_name, quadrature_order, mass_quadrature_order,
 						geom_disc_orders, false, false, has_polys,
 						!use_continuous_gbasis, use_corner_quadrature,
-						*space.geometry->bases, boundary.local_boundary, poly_edge_to_data_geom,
+						*space.geometry->assembly, boundary.local_boundary, poly_edge_to_data_geom,
 						space.geometry->mesh_nodes);
 
 				space.n_bases = basis::LagrangeBasis2d::build_bases(
@@ -436,8 +436,15 @@ namespace polyfem::varform
 					basis_type == "Bernstein",
 					basis_type == "Serendipity",
 					has_polys, false, use_corner_quadrature,
-					*space.bases, boundary.local_boundary, space.poly_edge_to_data, space.mesh_nodes);
+					*space.assembly, boundary.local_boundary, space.poly_edge_to_data, space.mesh_nodes);
 			}
+		}
+
+		space.bases = space.assembly->legacy_bases_ptr();
+		if (build_geom_mapping && !iso_parametric)
+		{
+			assert(space.geometry->assembly);
+			space.geometry->bases = space.geometry->assembly->legacy_bases_ptr();
 		}
 
 		const bool use_fe_space_as_geometry = build_geom_mapping ? iso_parametric : space.is_iso_parametric();

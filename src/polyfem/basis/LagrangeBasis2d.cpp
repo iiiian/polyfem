@@ -686,7 +686,7 @@ int LagrangeBasis2d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	assembler::ElementBases &bases,
+	assembler::AssemblyEssentials &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_edge_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -709,7 +709,7 @@ int LagrangeBasis2d::build_bases(
 	const bool has_polys,
 	const bool is_geom_bases,
 	const bool use_corner_quadrature,
-	assembler::ElementBases &bases,
+	assembler::AssemblyEssentials &bases,
 	std::vector<LocalBoundary> &local_boundary,
 	std::map<int, InterfaceData> &poly_edge_to_data,
 	std::shared_ptr<MeshNodes> &mesh_nodes)
@@ -797,7 +797,7 @@ int LagrangeBasis2d::build_bases(
 			basis_desc.order = serendipity ? -2 : discr_order;
 			basis_desc.orderq = basis_desc.order;
 			basis_desc.dim = 2;
-			basis_desc.basis_num = 1; // TODO
+			basis_desc.basis_num = n_el_bases;
 			basis_desc.eval_callback_id = -1;
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
@@ -838,7 +838,7 @@ int LagrangeBasis2d::build_bases(
 			basis_desc.order = rational ? 2 : discr_order;
 			basis_desc.orderq = basis_desc.order;
 			basis_desc.dim = 2;
-			basis_desc.basis_num = 1; // TODO
+			basis_desc.basis_num = n_el_bases;
 			basis_desc.eval_callback_id = -1;
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
@@ -1045,11 +1045,11 @@ int LagrangeBasis2d::build_bases(
 								global_to_local(verts, global_position, node_position);
 
 								// evaluate the basis of the opposite element at this node
-								Eigen::VectorXd w;
 								int node_num = node_position.rows();
 								auto node_pos_x = Span<const double>(node_position.col(0).data(), node_num);
 								auto node_pos_y = Span<const double>(node_position.col(1).data(), node_num);
 								BasisDesc basis_desc = bases.element_desc[opposite_element].basis_desc;
+								Eigen::VectorXd w(basis_count(basis_desc) * node_num);
 								basis_values(
 									basis_desc,
 									bases.basis_store.view(),
@@ -1155,11 +1155,11 @@ int LagrangeBasis2d::build_bases(
 								else
 									assert(false);
 
-								Eigen::VectorXd w;
 								int node_num = node_position.rows();
 								auto node_pos_x = Span<const double>(node_position.col(0).data(), node_num);
 								auto node_pos_y = Span<const double>(node_position.col(1).data(), node_num);
 								BasisDesc basis_desc = bases.element_desc[other_face].basis_desc;
+								Eigen::VectorXd w(basis_count(basis_desc) * node_num);
 								basis_values(
 									basis_desc,
 									bases.basis_store.view(),
