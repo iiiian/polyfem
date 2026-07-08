@@ -17,6 +17,11 @@ namespace polyfem::assembler
 		{
 			return (i == j) ? true : false;
 		}
+
+		int ng_dimension(const bool is_volume)
+		{
+			return is_volume ? 3 : 2;
+		}
 	} // namespace
 
 	NeoHookeanElasticity::NeoHookeanElasticity()
@@ -28,7 +33,7 @@ namespace polyfem::assembler
 		const int n_basis,
 		const AssemblyEssentials &bases) const
 	{
-		if (!has_ng_assembly_support() || !is_volume)
+		if (!has_ng_assembly_support() || size() != ng_dimension(is_volume))
 			return std::nullopt;
 
 		return compute_sparsity_pattern(bases.view(), n_basis, size());
@@ -52,11 +57,26 @@ namespace polyfem::assembler
 		(void)x_prev;
 		(void)dt;
 		assert(has_ng_assembly_support());
-		assert(is_volume);
+		assert(size() == ng_dimension(is_volume));
 		assert(grad.size() == x.size());
 
-		using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<3>>;
-		assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale);
+		switch (size())
+		{
+		case 2:
+		{
+			using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<2>>;
+			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale);
+			break;
+		}
+		case 3:
+		{
+			using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<3>>;
+			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale);
+			break;
+		}
+		default:
+			log_and_throw_error("Unsupported NG NeoHookean dimension {}.", size());
+		}
 	}
 
 	void NeoHookeanElasticity::assemble_hessian_ng(
@@ -78,14 +98,31 @@ namespace polyfem::assembler
 		(void)x_prev;
 		(void)dt;
 		assert(has_ng_assembly_support());
-		assert(is_volume);
+		assert(size() == ng_dimension(is_volume));
 		assert(hessian.rows() == x.size());
 		assert(hessian.cols() == x.size());
 
-		using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<3>>;
-		assemble_matrix<Kernel>(
-			bases, geom_bases, cache, materials, x,
-			hessian.static_view(), project_to_psd, t, scale);
+		switch (size())
+		{
+		case 2:
+		{
+			using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<2>>;
+			assemble_matrix<Kernel>(
+				bases, geom_bases, cache, materials, x,
+				hessian.static_view(), project_to_psd, t, scale);
+			break;
+		}
+		case 3:
+		{
+			using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<3>>;
+			assemble_matrix<Kernel>(
+				bases, geom_bases, cache, materials, x,
+				hessian.static_view(), project_to_psd, t, scale);
+			break;
+		}
+		default:
+			log_and_throw_error("Unsupported NG NeoHookean dimension {}.", size());
+		}
 	}
 
 	void NeoHookeanElasticity::add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path)

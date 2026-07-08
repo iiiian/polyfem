@@ -13,6 +13,7 @@
 #include <Eigen/Core>
 
 #include <cassert>
+#include <stdexcept>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -85,12 +86,13 @@ namespace polyfem::assembler
 			const AssemblyEssentialsView &bases,
 			const AssemblyEssentialsView &geom_bases,
 			int element_id,
+			bool is_mass,
 			AssemblyTempStorage &temp,
 			AssemblyCache &temp_cache)
 		{
 			temp_cache.clear();
-			compute_assembly_cache_single<dim>(bases, geom_bases, element_id, false, temp);
-			int cache_element_id = temp_cache.append(false, temp);
+			compute_assembly_cache_single<dim>(bases, geom_bases, element_id, is_mass, temp);
+			int cache_element_id = temp_cache.append(is_mass, temp);
 			assert(cache_element_id == 0);
 			return temp_cache.view().slice(cache_element_id);
 		}
@@ -100,23 +102,29 @@ namespace polyfem::assembler
 			const AssemblyEssentialsView &geom_bases,
 			AssemblyCacheView cache,
 			int element_id,
+			bool is_mass,
 			AssemblyTempStorage &temp,
 			AssemblyCache &temp_cache)
 		{
 			if (!cache.desc.empty() && !cache.desc[element_id].is_empty)
 			{
-				return cache.slice(element_id);
+				ElementAssemblyCacheView view = cache.slice(element_id);
+				if (view.is_mass != is_mass)
+				{
+					throw std::runtime_error("CPU assembler cache mass flag does not match requested assembly.");
+				}
+				return view;
 			}
 
 			int dim = bases.element_desc[element_id].basis_desc.dim;
 			switch (dim)
 			{
 			case 1:
-				return compute_element_cache<1>(bases, geom_bases, element_id, temp, temp_cache);
+				return compute_element_cache<1>(bases, geom_bases, element_id, is_mass, temp, temp_cache);
 			case 2:
-				return compute_element_cache<2>(bases, geom_bases, element_id, temp, temp_cache);
+				return compute_element_cache<2>(bases, geom_bases, element_id, is_mass, temp, temp_cache);
 			case 3:
-				return compute_element_cache<3>(bases, geom_bases, element_id, temp, temp_cache);
+				return compute_element_cache<3>(bases, geom_bases, element_id, is_mass, temp, temp_cache);
 			default:
 				throw std::runtime_error("Unsupported element dimension in CPU assembly.");
 			}
@@ -399,6 +407,7 @@ namespace polyfem::assembler
 					geom_bases_view,
 					cache_view,
 					elem_id,
+					/*is_mass=*/false,
 					temp,
 					temp_cache);
 				local_scalar += host_detail::assemble_element_scalar<ScalarKernel>(
@@ -445,6 +454,7 @@ namespace polyfem::assembler
 					geom_bases_view,
 					cache_view,
 					elem_id,
+					/*is_mass=*/false,
 					temp,
 					temp_cache);
 				scalar_out[elem_id] += host_detail::assemble_element_scalar<ScalarKernel>(
@@ -492,6 +502,7 @@ namespace polyfem::assembler
 					geom_bases_view,
 					cache_view,
 					elem_id,
+					/*is_mass=*/false,
 					temp,
 					temp_cache);
 				host_detail::assemble_element_vector<VectorKernel>(
@@ -530,7 +541,8 @@ namespace polyfem::assembler
 		BSRMatrixMutableView matrix_out,
 		bool project_to_psd = false,
 		double time = 0.0,
-		double extra_scaling = 1.0)
+		double extra_scaling = 1.0,
+		bool is_mass = false)
 	{
 		constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
 
@@ -555,6 +567,7 @@ namespace polyfem::assembler
 					geom_bases_view,
 					cache_view,
 					elem_id,
+					is_mass,
 					temp,
 					temp_cache);
 				host_detail::assemble_element_matrix<MatrixKernel>(

@@ -1,7 +1,54 @@
 #include "Mass.hpp"
 
+#include <polyfem/assembler/AssembleOnHost.hpp>
+#include <polyfem/assembler/ComputeSparsityPattern.hpp>
+
 namespace polyfem::assembler
 {
+	namespace
+	{
+		int basis_dimension(const AssemblyEssentials &bases, const bool is_volume)
+		{
+			if (bases.element_desc.empty())
+				return is_volume ? 3 : 2;
+
+			const int dim = bases.element_desc.front().basis_desc.dim;
+			for (const ElementDesc &element : bases.element_desc)
+				assert(element.basis_desc.dim == dim);
+			return dim;
+		}
+
+		template <int value_dim, int dim>
+		struct MassMatrixKernel
+		{
+			using Material = material::Density<double>;
+			static constexpr int VALUE_DIM = value_dim;
+			static constexpr int DIM = dim;
+
+			static void eval_matrix(
+				const int element_id,
+				const int quad_id,
+				const int bi,
+				const int bj,
+				const AssemblyEssentialsView &bases,
+				const ElementAssemblyCacheView &cache,
+				const Material &material,
+				Span<const double> unknown,
+				Span<double> local_matrix)
+			{
+				(void)element_id;
+				(void)quad_id;
+				(void)bases;
+				(void)unknown;
+
+				const double value = material.rho * cache.get_basis_value(bi, quad_id) * cache.get_basis_value(bj, quad_id);
+				for (int d = 0; d < value_dim; ++d)
+					local_matrix[d * value_dim + d] = value;
+			}
+		};
+
+	} // namespace
+
 	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 9, 1> Mass::assemble(const LinearAssemblerData &data) const
 	{
 		double tmp = 0;
@@ -20,6 +67,99 @@ namespace polyfem::assembler
 			res(i * size() + i) = tmp;
 
 		return res;
+	}
+
+	std::optional<BSRSparsityPattern> Mass::hessian_sparsity_pattern_ng(
+		const bool is_volume,
+		const int n_basis,
+		const AssemblyEssentials &bases) const
+	{
+		const int dim = basis_dimension(bases, is_volume);
+		if (!has_ng_assembly_support() || dim < 1 || dim > 3)
+			return std::nullopt;
+
+		return compute_sparsity_pattern(bases.view(), n_basis, size());
+	}
+
+	void Mass::assemble_hessian_ng(
+		const bool is_volume,
+		const int n_basis,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
+		const AssemblyCache &cache,
+		const material::MaterialExprRegistry &materials,
+		Span<const double> x,
+		Span<const double> x_prev,
+		const double t,
+		const double dt,
+		BSRMatrix &hessian,
+		const bool project_to_psd,
+		const double scale) const
+	{
+		(void)n_basis;
+		(void)x;
+		(void)x_prev;
+		(void)dt;
+		(void)project_to_psd;
+
+		assert(has_ng_assembly_support());
+		assert(hessian.rows() == size() * n_basis);
+		assert(hessian.cols() == size() * n_basis);
+
+		const int dim = basis_dimension(bases, is_volume);
+		switch (dim)
+		{
+		case 1:
+			switch (size())
+			{
+			case 1:
+				assemble_matrix<MassMatrixKernel<1, 1>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			case 2:
+				assemble_matrix<MassMatrixKernel<2, 1>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			case 3:
+				assemble_matrix<MassMatrixKernel<3, 1>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			default:
+				log_and_throw_error("Unsupported NG mass value dimension {}.", size());
+			}
+			break;
+		case 2:
+			switch (size())
+			{
+			case 1:
+				assemble_matrix<MassMatrixKernel<1, 2>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			case 2:
+				assemble_matrix<MassMatrixKernel<2, 2>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			case 3:
+				assemble_matrix<MassMatrixKernel<3, 2>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			default:
+				log_and_throw_error("Unsupported NG mass value dimension {}.", size());
+			}
+			break;
+		case 3:
+			switch (size())
+			{
+			case 1:
+				assemble_matrix<MassMatrixKernel<1, 3>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			case 2:
+				assemble_matrix<MassMatrixKernel<2, 3>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			case 3:
+				assemble_matrix<MassMatrixKernel<3, 3>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian.static_view(), false, t, scale, true);
+				break;
+			default:
+				log_and_throw_error("Unsupported NG mass value dimension {}.", size());
+			}
+			break;
+		default:
+			log_and_throw_error("Unsupported NG mass geometric dimension {}.", dim);
+		}
 	}
 
 	Eigen::Matrix<double, Eigen::Dynamic, 1, 0, 3, 1> Mass::compute_rhs(const AutodiffHessianPt &pt) const

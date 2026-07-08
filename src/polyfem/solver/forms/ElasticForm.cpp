@@ -300,7 +300,6 @@ namespace polyfem::solver
 	{
 		return assembler_.has_ng_assembly_support()
 			   && check_inversion_ == ElementInversionCheck::Discrete
-			   && is_volume_
 			   && ng_bases_ != nullptr
 			   && ng_geom_bases_ != nullptr
 			   && ng_cache_ != nullptr

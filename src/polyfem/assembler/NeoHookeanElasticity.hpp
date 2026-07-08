@@ -22,7 +22,7 @@ namespace polyfem::assembler
 		Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const override;
 		Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const override;
 
-		bool has_ng_assembly_support() const override { return size() == 3; }
+		bool has_ng_assembly_support() const override { return size() == 2 || size() == 3; }
 		std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng(
 			bool is_volume,
 			int n_basis,

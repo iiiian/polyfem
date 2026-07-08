@@ -30,6 +30,25 @@ namespace polyfem::assembler
 
 		std::string name() const override { return "Mass"; }
 		virtual std::map<std::string, ParamFunc> parameters() const override;
+		bool has_ng_assembly_support() const override { return size() >= 1 && size() <= 3; }
+		std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng(
+			bool is_volume,
+			int n_basis,
+			const AssemblyEssentials &bases) const override;
+		void assemble_hessian_ng(
+			bool is_volume,
+			int n_basis,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			double t,
+			double dt,
+			BSRMatrix &hessian,
+			bool project_to_psd,
+			double scale) const override;
 
 	private:
 		// class that stores and compute density per point
