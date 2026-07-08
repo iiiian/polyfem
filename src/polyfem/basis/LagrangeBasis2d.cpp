@@ -747,6 +747,7 @@ int LagrangeBasis2d::build_bases(
 		const int n_el_bases = element_nodes_id[e].size();
 		element_dof_mappings[e].resize(n_el_bases);
 		bases.element_desc.push_back(ElementDesc{});
+		bases.legacy_local_nodes_from_primitive.push_back({});
 		auto &element_desc = bases.element_desc.back();
 		const bool is_parametric = !mesh.is_polytope(e);
 
@@ -803,7 +804,7 @@ int LagrangeBasis2d::build_bases(
 			basis_desc.is_bernstein = bernstein;
 
 			// Build legacy callbacks.
-			bases.legacy_local_nodes_from_primitive.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			bases.legacy_local_nodes_from_primitive[e] = [discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 				auto index = mesh2d.get_index_from_face(e);
 
@@ -815,7 +816,7 @@ int LagrangeBasis2d::build_bases(
 				}
 				assert(index.edge == primitive_id);
 				return polyfem::basis::LagrangeBasis2d::quad_edge_local_nodes(discr_order, mesh2d, index);
-			});
+			};
 		}
 		else if (mesh.is_simplex(e))
 		{
@@ -851,7 +852,7 @@ int LagrangeBasis2d::build_bases(
 			}
 
 			// Build legacy callbacks.
-			bases.legacy_local_nodes_from_primitive.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			bases.legacy_local_nodes_from_primitive[e] = [discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 				auto index = mesh2d.get_index_from_face(e);
 
@@ -863,7 +864,7 @@ int LagrangeBasis2d::build_bases(
 				}
 				assert(index.edge == primitive_id);
 				return polyfem::basis::LagrangeBasis2d::tri_edge_local_nodes(discr_order, mesh2d, index);
-			});
+			};
 		}
 		else
 		{

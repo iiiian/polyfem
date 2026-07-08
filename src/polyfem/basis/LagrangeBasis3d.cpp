@@ -2483,6 +2483,7 @@ int LagrangeBasis3d::build_bases(
 		const int n_el_bases = (int)element_nodes_id[e].size();
 		element_dof_mappings[e].resize(n_el_bases);
 		bases.element_desc.push_back(ElementDesc{});
+		bases.legacy_local_nodes_from_primitive.push_back({});
 		auto &element_desc = bases.element_desc.back();
 		const bool is_parametric = !mesh.is_polytope(e);
 
@@ -2534,7 +2535,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
 
-			bases.legacy_local_nodes_from_primitive.push_back([serendipity, discr_order, e](const int primitive_id, const Mesh &mesh) {
+			bases.legacy_local_nodes_from_primitive[e] = [serendipity, discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2546,7 +2547,7 @@ int LagrangeBasis3d::build_bases(
 				}
 				assert(index.face == primitive_id);
 				return hex_face_local_nodes(serendipity, discr_order, mesh3d, index);
-			});
+			};
 		}
 		else if (mesh.is_simplex(e))
 		{
@@ -2573,7 +2574,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = bernstein;
 
-			bases.legacy_local_nodes_from_primitive.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			bases.legacy_local_nodes_from_primitive[e] = [discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2585,7 +2586,7 @@ int LagrangeBasis3d::build_bases(
 				}
 				assert(index.face == primitive_id);
 				return tet_face_local_nodes(discr_order, mesh3d, index);
-			});
+			};
 		}
 		else if (mesh.is_prism(e))
 		{
@@ -2612,7 +2613,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = false;
 
-			bases.legacy_local_nodes_from_primitive.push_back([discr_order, discr_orderq, e](const int primitive_id, const Mesh &mesh) {
+			bases.legacy_local_nodes_from_primitive[e] = [discr_order, discr_orderq, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2624,7 +2625,7 @@ int LagrangeBasis3d::build_bases(
 				}
 				assert(index.face == primitive_id);
 				return prism_face_local_nodes(discr_order, discr_orderq, mesh3d, index);
-			});
+			};
 		}
 		else if (mesh.is_pyramid(e))
 		{
@@ -2648,7 +2649,7 @@ int LagrangeBasis3d::build_bases(
 			basis_desc.is_parametric = is_parametric;
 			basis_desc.is_bernstein = false;
 
-			bases.legacy_local_nodes_from_primitive.push_back([discr_order, e](const int primitive_id, const Mesh &mesh) {
+			bases.legacy_local_nodes_from_primitive[e] = [discr_order, e](const int primitive_id, const Mesh &mesh) {
 				const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 				Navigation3D::Index index;
 
@@ -2660,7 +2661,7 @@ int LagrangeBasis3d::build_bases(
 				}
 				assert(index.face == primitive_id);
 				return pyramid_face_local_nodes(discr_order, mesh3d, index);
-			});
+			};
 		}
 		else
 		{
