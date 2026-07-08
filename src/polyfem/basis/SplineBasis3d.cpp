@@ -1148,12 +1148,12 @@ namespace polyfem
 				Quadrature quad;
 				HexQuadrature{}.get_quadrature(real_order, quad);
 				element_desc.quadrature_desc = bases.quadrature_store.append(quad);
-					HexQuadrature{}.get_quadrature(real_mass_order, quad);
-					element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
+				HexQuadrature{}.get_quadrature(real_mass_order, quad);
+				element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
-					const bool is_parametric = !mesh.is_polytope(e);
-					bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
-						const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
+				const bool is_parametric = !mesh.is_polytope(e);
+				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
+					const auto &mesh3d = dynamic_cast<const Mesh3D &>(mesh);
 
 					std::array<std::function<Navigation3D::Index(Navigation3D::Index)>, 6> to_face;
 					mesh3d.to_face_functions(to_face);

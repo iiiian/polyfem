@@ -808,13 +808,13 @@ namespace polyfem
 				Quadrature quad;
 				QuadQuadrature{}.get_quadrature(real_order, quad);
 				element_desc.quadrature_desc = bases.quadrature_store.append(quad);
-					QuadQuadrature{}.get_quadrature(real_mass_order, quad);
-					element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
+				QuadQuadrature{}.get_quadrature(real_mass_order, quad);
+				element_desc.mass_quadrature_desc = bases.mass_quadrature_store.append(quad);
 
-					const bool is_parametric = !mesh.is_polytope(e);
-					bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
-						Eigen::VectorXi res(3);
-						const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
+				const bool is_parametric = !mesh.is_polytope(e);
+				bases.legacy_local_nodes_from_primitive[e] = [e](const int primitive_id, const Mesh &mesh) {
+					Eigen::VectorXi res(3);
+					const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 					auto index = mesh2d.get_index_from_face(e);
 					int le;
 					for (le = 0; le < mesh2d.n_face_vertices(e); ++le)
