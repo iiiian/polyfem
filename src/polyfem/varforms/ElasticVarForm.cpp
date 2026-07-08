@@ -17,6 +17,8 @@
 
 #include <polyfem/mesh/Obstacle.hpp>
 
+#include <polyfem/materials/BuildMaterialExprFromJson.hpp>
+
 #include <polyfem/problem/KernelProblem.hpp>
 #include <polyfem/problem/ProblemFactory.hpp>
 
@@ -47,6 +49,8 @@ namespace polyfem::varform
 		ass_vals_cache_.init_empty();
 		mass_ass_vals_cache_.init_empty(true);
 		pure_mass_ass_vals_cache_.init_empty(true);
+		ng_ass_cache_.clear();
+		material_expr_registry_.reset();
 		rhs_assembler_ = nullptr;
 		mass_.resize(0, 0);
 		pure_mass_.resize(0, 0);
@@ -121,6 +125,7 @@ namespace polyfem::varform
 		set_materials(*primary_assembler_, mesh.dimension());
 		set_materials(*mass_assembler_, mesh.dimension());
 		pure_mass_assembler_->set_size(mass_assembler_->size());
+		material_expr_registry_ = material::build_material_expr_registry_from_json(args["materials"], mesh, units, root_path);
 
 		problem->init(mesh);
 

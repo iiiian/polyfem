@@ -40,7 +40,15 @@ namespace polyfem::assembler
 						{
 							assert(0 <= row_node && row_node < node_num);
 							assert(0 <= col_node && col_node < node_num);
-							pattern.insert(row_node * block_dim, col_node * block_dim);
+							for (int r = 0; r < block_dim; ++r)
+							{
+								for (int c = 0; c < block_dim; ++c)
+								{
+									pattern.insert(
+										row_node * block_dim + r,
+										col_node * block_dim + c);
+								}
+							}
 						}
 					}
 				}

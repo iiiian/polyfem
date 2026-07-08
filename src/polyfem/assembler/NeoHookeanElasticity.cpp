@@ -1,5 +1,9 @@
 #include "NeoHookeanElasticity.hpp"
 
+#include <polyfem/assembler/AssembleOnHost.hpp>
+#include <polyfem/assembler/ComputeSparsityPattern.hpp>
+#include <polyfem/assembler/ng/AutoDiffKernel.hpp>
+#include <polyfem/assembler/ng/NeohookeanEnergy.hpp>
 #include <polyfem/utils/Jacobian.hpp>
 #include <polyfem/autogen/auto_elasticity_rhs.hpp>
 
@@ -17,6 +21,71 @@ namespace polyfem::assembler
 
 	NeoHookeanElasticity::NeoHookeanElasticity()
 	{
+	}
+
+	std::optional<BSRSparsityPattern> NeoHookeanElasticity::hessian_sparsity_pattern_ng(
+		const bool is_volume,
+		const int n_basis,
+		const AssemblyEssentials &bases) const
+	{
+		if (!has_ng_assembly_support() || !is_volume)
+			return std::nullopt;
+
+		return compute_sparsity_pattern(bases.view(), n_basis, size());
+	}
+
+	void NeoHookeanElasticity::assemble_gradient_ng(
+		const bool is_volume,
+		const int n_basis,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
+		const AssemblyCache &cache,
+		const material::MaterialExprRegistry &materials,
+		Span<const double> x,
+		Span<const double> x_prev,
+		const double t,
+		const double dt,
+		Span<double> grad,
+		const double scale) const
+	{
+		(void)n_basis;
+		(void)x_prev;
+		(void)dt;
+		assert(has_ng_assembly_support());
+		assert(is_volume);
+		assert(grad.size() == x.size());
+
+		using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<3>>;
+		assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale);
+	}
+
+	void NeoHookeanElasticity::assemble_hessian_ng(
+		const bool is_volume,
+		const int n_basis,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
+		const AssemblyCache &cache,
+		const material::MaterialExprRegistry &materials,
+		Span<const double> x,
+		Span<const double> x_prev,
+		const double t,
+		const double dt,
+		BSRMatrix &hessian,
+		const bool project_to_psd,
+		const double scale) const
+	{
+		(void)n_basis;
+		(void)x_prev;
+		(void)dt;
+		assert(has_ng_assembly_support());
+		assert(is_volume);
+		assert(hessian.rows() == x.size());
+		assert(hessian.cols() == x.size());
+
+		using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<3>>;
+		assemble_matrix<Kernel>(
+			bases, geom_bases, cache, materials, x,
+			hessian.static_view(), project_to_psd, t, scale);
 	}
 
 	void NeoHookeanElasticity::add_multimaterial(const int index, const json &params, const Units &units, const std::string &root_path)

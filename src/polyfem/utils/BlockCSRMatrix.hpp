@@ -98,6 +98,10 @@ namespace polyfem
 		/// Construct a block_dim = 1 matrix with no static BSR entries (dynamic-only).
 		BSRMatrix(int rows, int cols);
 
+		int rows() const { return rows_; }
+		int cols() const { return cols_; }
+		int block_dim() const { return block_dim_; }
+
 		/// Lazily allocate zero initialized static value array and return matrix view.
 		BSRMatrixMutableView static_view();
 
@@ -123,4 +127,14 @@ namespace polyfem
 		StiffnessMatrix to_stiffness_matrix_device(CudaExecutionPolicy policy = {});
 #endif
 	};
+
+	void append_sparse_matrix_to_triplets(
+		const StiffnessMatrix &matrix,
+		std::vector<Eigen::Triplet<double>> &triplets,
+		double scale = 1.0);
+
+	void add_sparse_matrix_to_bsr_static(
+		const StiffnessMatrix &matrix,
+		BSRMatrixMutableView bsr,
+		double scale = 1.0);
 } // namespace polyfem

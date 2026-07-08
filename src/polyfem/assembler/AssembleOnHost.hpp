@@ -317,7 +317,6 @@ namespace polyfem::assembler
 			int value_dim,
 			BSRMatrixMutableView global_matrix)
 		{
-			assert(value_dim == global_matrix.block_dim);
 			int local_dof_num = basis_num * value_dim;
 			assert(local_matrix.rows() == local_dof_num);
 			assert(local_matrix.cols() == local_dof_num);
@@ -350,19 +349,19 @@ namespace polyfem::assembler
 					{
 						for (int col_node_id = 0; col_node_id < col_node_ids.size(); ++col_node_id)
 						{
-							double *block_ptr = global_matrix.get_block(row_node_ids[row_node_id], col_node_ids[col_node_id]);
-							assert(block_ptr);
-
 							double weight = row_weights[row_node_id] * col_weights[col_node_id];
 							for (int r = 0; r < value_dim; ++r)
 							{
-								double *dst = block_ptr + r * value_dim;
 								for (int c = 0; c < value_dim; ++c)
 								{
 									double value = local_block(r, c);
 									if (value != 0.0)
 									{
-										atomic_add(dst[c], weight * value);
+										const int row = row_node_ids[row_node_id] * value_dim + r;
+										const int col = col_node_ids[col_node_id] * value_dim + c;
+										double *dst = global_matrix.get_entry(row, col);
+										assert(dst);
+										atomic_add(*dst, weight * value);
 									}
 								}
 							}
@@ -534,7 +533,6 @@ namespace polyfem::assembler
 		double extra_scaling = 1.0)
 	{
 		constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
-		assert(matrix_out.block_dim == VALUE_DIM);
 
 		const AssemblyEssentialsView bases_view = bases.view();
 		const AssemblyEssentialsView geom_bases_view = geom_bases.view();

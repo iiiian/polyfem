@@ -47,7 +47,7 @@ namespace polyfem
 		assert(rows == other.rows);
 		assert(cols == other.cols);
 
-		block_dim = std::min(block_dim, other.block_dim);
+		block_dim = std::max(block_dim, other.block_dim);
 		non_zeros.insert(other.non_zeros.begin(), other.non_zeros.end());
 	}
 
@@ -194,6 +194,41 @@ namespace polyfem
 		StiffnessMatrix out(rows_, cols_);
 		out.setFromTriplets(entries.begin(), entries.end());
 		return out;
+	}
+
+	void append_sparse_matrix_to_triplets(
+		const StiffnessMatrix &matrix,
+		std::vector<Eigen::Triplet<double>> &triplets,
+		double scale)
+	{
+		for (int k = 0; k < matrix.outerSize(); ++k)
+		{
+			for (StiffnessMatrix::InnerIterator it(matrix, k); it; ++it)
+			{
+				const double value = scale * it.value();
+				if (value != 0.0)
+					triplets.emplace_back(it.row(), it.col(), value);
+			}
+		}
+	}
+
+	void add_sparse_matrix_to_bsr_static(
+		const StiffnessMatrix &matrix,
+		BSRMatrixMutableView bsr,
+		double scale)
+	{
+		assert(matrix.rows() == bsr.rows);
+		assert(matrix.cols() == bsr.cols);
+
+		for (int k = 0; k < matrix.outerSize(); ++k)
+		{
+			for (StiffnessMatrix::InnerIterator it(matrix, k); it; ++it)
+			{
+				double *entry = bsr.get_entry(static_cast<int>(it.row()), static_cast<int>(it.col()));
+				assert(entry != nullptr);
+				*entry += scale * it.value();
+			}
+		}
 	}
 
 #ifdef POLYFEM_WITH_CUDA

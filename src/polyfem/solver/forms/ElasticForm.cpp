@@ -284,6 +284,71 @@ namespace polyfem::solver
 		}
 	}
 
+	void ElasticForm::set_ng_sources(
+		const assembler::AssemblyEssentials *bases,
+		const assembler::AssemblyEssentials *geom_bases,
+		const assembler::AssemblyCache *cache,
+		const material::MaterialExprRegistry *materials)
+	{
+		ng_bases_ = bases;
+		ng_geom_bases_ = geom_bases;
+		ng_cache_ = cache;
+		ng_materials_ = materials;
+	}
+
+	bool ElasticForm::can_use_ng_assembly() const
+	{
+		return assembler_.has_ng_assembly_support()
+			   && check_inversion_ == ElementInversionCheck::Discrete
+			   && is_volume_
+			   && ng_bases_ != nullptr
+			   && ng_geom_bases_ != nullptr
+			   && ng_cache_ != nullptr
+			   && ng_materials_ != nullptr;
+	}
+
+	void ElasticForm::first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv) const
+	{
+		if (!can_use_ng_assembly()
+			|| x.size() != n_bases_ * assembler_.size())
+		{
+			Form::first_derivative_ng(x, gradv);
+			return;
+		}
+
+		assembler_.assemble_gradient_ng(
+			is_volume_, n_bases_, *ng_bases_, *ng_geom_bases_, *ng_cache_, *ng_materials_,
+			Span<const double>(x.data(), x.size()),
+			Span<const double>(x_prev_.data(), x_prev_.size()),
+			t_, dt_, gradv, weighted_scale());
+	}
+
+	std::optional<BSRSparsityPattern> ElasticForm::hessian_sparsity_pattern_ng() const
+	{
+		if (!can_use_ng_assembly())
+			return std::nullopt;
+
+		return assembler_.hessian_sparsity_pattern_ng(is_volume_, n_bases_, *ng_bases_);
+	}
+
+	void ElasticForm::second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian) const
+	{
+		if (!can_use_ng_assembly()
+			|| x.size() != n_bases_ * assembler_.size()
+			|| hessian.rows() != x.size()
+			|| hessian.cols() != x.size())
+		{
+			Form::second_derivative_ng(x, hessian);
+			return;
+		}
+
+		assembler_.assemble_hessian_ng(
+			is_volume_, n_bases_, *ng_bases_, *ng_geom_bases_, *ng_cache_, *ng_materials_,
+			Span<const double>(x.data(), x.size()),
+			Span<const double>(x_prev_.data(), x_prev_.size()),
+			t_, dt_, hessian, project_to_psd_, weighted_scale());
+	}
+
 	double ElasticForm::value_unweighted(const Eigen::VectorXd &x) const
 	{
 		return assembler_.assemble_energy(

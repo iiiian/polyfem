@@ -109,7 +109,7 @@ namespace polyfem::assembler
 			{
 				Vec grad = xyz2vec<dim>(bi * quad_num + qi, temp.basis_grad_x, temp.basis_grad_y, temp.basis_grad_z);
 				auto J_it = Eigen::Map<Mat>(temp.J_inverse_transpose.data() + dim * dim * qi);
-				Vec grad_phy = J_it * grad;
+				Vec grad_phy = J_it.transpose() * grad;
 				vec2xyz<dim>(bi * quad_num + qi, grad_phy, temp.basis_grad_phy_x, temp.basis_grad_phy_y, temp.basis_grad_phy_z);
 			}
 		}

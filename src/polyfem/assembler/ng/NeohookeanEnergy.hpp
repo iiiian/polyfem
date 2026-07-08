@@ -32,7 +32,7 @@ namespace polyfem::assembler
 			// Deformation grad type.
 			using FType = Eigen::Matrix<Scalar, dim, dim, Eigen::RowMajor>;
 
-			auto [lambda, mu] = material::lambda_mu<dim>(material);
+			auto [lambda, mu] = material::lambda_mu<dim>(material.lame);
 			auto F = Eigen::Map<const FType>(gradu.data()) + FType::Identity();
 			Scalar log_J = log(F.determinant());
 			// μ/2 [ trace(FF^T)^2 - dim ]  - μ log(J) + λ/2 log(J)^2

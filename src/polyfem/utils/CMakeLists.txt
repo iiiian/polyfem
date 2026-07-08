@@ -69,6 +69,8 @@ set(SOURCES
 if(POLYFEM_WITH_CUDA)
 	list(APPEND SOURCES
 		BlockCSRMatrix.cu
+		CUDAExecutionPolicy.cpp
+		CUDAExecutionPolicy.hpp
 	)
 endif()
 

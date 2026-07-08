@@ -157,7 +157,7 @@ namespace polyfem::assembler
 				}
 				if constexpr (NEED_UNKNOWN_GRAD)
 				{
-					Vec1 grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
+					Vec2 grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
 					Vec1 local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					gradu_value += local_node_unknown * grad_phi.transpose();
 				}
@@ -260,7 +260,7 @@ namespace polyfem::assembler
 				}
 				if constexpr (NEED_UNKNOWN_GRAD)
 				{
-					Vec1 grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
+					Vec2 grad_phi = cache.get_basis_grad_phy<DIM>(b, quad_id);
 					Vec1 local_node_unknown = detail::get_local_node_unknown<VALUE_DIM>(elem_id, b, bases, unknown);
 					gradu_value += local_node_unknown * grad_phi.transpose();
 				}
@@ -321,10 +321,15 @@ namespace polyfem::assembler
 
 			AD energy = EnergyKernel::template eval_scalar<AD>(u, gradu, material);
 
-			auto &local_hess = energy.get_hess();
-			for (int k = 0; k < local_hess.size(); ++k)
+			// Double2<VALUE_DIM> stores the upper-right Hessian block between
+			// the local_i and local_j variable groups seeded below.
+			const auto &local_hess = energy.get_hess();
+			for (int row = 0; row < VALUE_DIM; ++row)
 			{
-				matrix_ij[k] = local_hess.data()[k];
+				for (int col = 0; col < VALUE_DIM; ++col)
+				{
+					matrix_ij[row * VALUE_DIM + col] = local_hess(row, col);
+				}
 			}
 		}
 	};

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <polyfem/utils/BlockCSRMatrix.hpp>
+#include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/Types.hpp>
 #include <polysolve/nonlinear/PostStepData.hpp>
 
 #include <filesystem>
+#include <optional>
 
 namespace polyfem::solver
 {
@@ -53,6 +56,29 @@ namespace polyfem::solver
 		{
 			second_derivative_unweighted(x, hessian);
 			hessian *= weight() / scale_;
+		}
+
+		virtual void first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv) const
+		{
+			Eigen::VectorXd tmp;
+			first_derivative(x, tmp);
+			assert(tmp.size() == gradv.size());
+			for (int i = 0; i < tmp.size(); ++i)
+				gradv[i] += tmp[i];
+		}
+
+		virtual std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng() const
+		{
+			return std::nullopt;
+		}
+
+		virtual void second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian) const
+		{
+			StiffnessMatrix tmp;
+			second_derivative(x, tmp);
+			assert(tmp.rows() == hessian.rows());
+			assert(tmp.cols() == hessian.cols());
+			append_sparse_matrix_to_triplets(tmp, hessian.dynamic_view());
 		}
 
 		/// @brief Determine if a step from solution x0 to solution x1 is allowed
@@ -142,6 +168,8 @@ namespace polyfem::solver
 		/// @brief sets the scale for the form
 		/// @param scale
 		void virtual set_scale(const double scale) { scale_ = scale; }
+
+		double weighted_scale() const { return weight() / scale_; }
 
 	protected:
 		bool project_to_psd_ = false; ///< If true, the form's second derivative is projected to be positive semidefinite

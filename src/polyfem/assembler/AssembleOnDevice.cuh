@@ -102,7 +102,7 @@ namespace polyfem::assembler
 		{
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
 			auto mat = Eigen::Map<const Mat>(local_mat.data());
-			assert(global_mat.block_dim == VALUE_DIM);
+			assert(local_mat.size() == VALUE_DIM * VALUE_DIM);
 
 			auto &elem_desc = bases.element_desc[elem_id];
 			auto &mappings = bases.dof_mapping_store;
@@ -113,18 +113,28 @@ namespace polyfem::assembler
 			auto row_node_weights = mappings.get_weights(row_mapping_id);
 			auto col_node_ids = mappings.get_node_ids(col_mapping_id);
 			auto col_node_weights = mappings.get_weights(col_mapping_id);
+			assert(row_node_ids.size() == row_node_weights.size());
+			assert(col_node_ids.size() == col_node_weights.size());
 
 			for (int i = 0; i < row_node_ids.size(); ++i)
 			{
 				for (int j = 0; j < col_node_ids.size(); ++j)
 				{
-					double *block_ptr = global_mat.get_block(row_node_ids[i], col_node_ids[j]);
-					assert(block_ptr);
-
-					for (int k = 0; k < mat.size(); ++k)
+					double weight = row_node_weights[i] * col_node_weights[j];
+					for (int r = 0; r < VALUE_DIM; ++r)
 					{
-						double val = row_node_weights[i] * col_node_weights[j] * mat.data()[k];
-						atomicAdd(block_ptr + k, val);
+						for (int c = 0; c < VALUE_DIM; ++c)
+						{
+							double local_value = mat(r, c);
+							if (local_value != 0.0)
+							{
+								int global_row = row_node_ids[i] * VALUE_DIM + r;
+								int global_col = col_node_ids[j] * VALUE_DIM + c;
+								double *dst = global_mat.get_entry(global_row, global_col);
+								assert(dst);
+								atomicAdd(dst, weight * local_value);
+							}
+						}
 					}
 				}
 			}

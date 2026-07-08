@@ -3,6 +3,18 @@
 
 namespace polyfem::solver
 {
+	namespace
+	{
+		std::vector<uint8_t> enabled_mask(const std::vector<std::shared_ptr<Form>> &forms)
+		{
+			std::vector<uint8_t> enabled;
+			enabled.reserve(forms.size());
+			for (const auto &form : forms)
+				enabled.push_back(form->enabled() ? 1 : 0);
+			return enabled;
+		}
+	} // namespace
+
 	FullNLProblem::FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms)
 		: forms_(forms)
 	{
@@ -111,27 +123,61 @@ namespace polyfem::solver
 	void FullNLProblem::gradient(const TVector &x, TVector &grad)
 	{
 		grad = TVector::Zero(x.size());
+		Span<double> grad_span(grad.data(), grad.size());
 		for (auto &f : forms_)
 		{
 			if (!f->enabled())
 				continue;
-			TVector tmp;
-			f->first_derivative(x, tmp);
-			grad += tmp;
+			f->first_derivative_ng(x, grad_span);
 		}
 	}
 
 	void FullNLProblem::hessian(const TVector &x, THessian &hessian)
 	{
-		hessian.resize(x.size(), x.size());
+		const std::vector<uint8_t> enabled = enabled_mask(forms_);
+
+		if (!hessian_bsr_
+			|| hessian_bsr_ndof_ != x.size()
+			|| hessian_bsr_enabled_ != enabled)
+		{
+			std::optional<BSRSparsityPattern> joined_pattern;
+
+			for (auto &f : forms_)
+			{
+				if (!f->enabled())
+					continue;
+
+				auto pattern = f->hessian_sparsity_pattern_ng();
+				if (!pattern)
+					continue;
+
+				if (pattern->rows != x.size() || pattern->cols != x.size())
+					continue;
+
+				if (joined_pattern)
+					joined_pattern->join(*pattern);
+				else
+					joined_pattern = std::move(pattern);
+			}
+
+			if (joined_pattern)
+				hessian_bsr_.emplace(*joined_pattern);
+			else
+				hessian_bsr_.emplace(x.size(), x.size());
+
+			hessian_bsr_ndof_ = x.size();
+			hessian_bsr_enabled_ = std::move(enabled);
+		}
+
+		hessian_bsr_->reset();
 		for (auto &f : forms_)
 		{
 			if (!f->enabled())
 				continue;
-			THessian tmp;
-			f->second_derivative(x, tmp);
-			hessian += tmp;
+			f->second_derivative_ng(x, *hessian_bsr_);
 		}
+
+		hessian = hessian_bsr_->to_stiffness_matrix();
 	}
 
 	void FullNLProblem::solution_changed(const TVector &x)

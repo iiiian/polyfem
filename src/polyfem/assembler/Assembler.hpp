@@ -3,12 +3,19 @@
 #include <polyfem/Units.hpp>
 
 #include <polyfem/assembler/AssemblerData.hpp>
+#include <polyfem/assembler/AssemblyCache.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/assembler/AssemblyValsCache.hpp>
+#include <polyfem/materials/MaterialExprRegistry.hpp>
 
 #include <polyfem/utils/MatrixCache.hpp>
 #include <polyfem/utils/ElasticityUtils.hpp>
 #include <polyfem/utils/AutodiffTypes.hpp>
+#include <polyfem/utils/BlockCSRMatrix.hpp>
 #include <polyfem/utils/Logger.hpp>
+#include <polyfem/utils/Span.hpp>
+
+#include <optional>
 
 // this casses are instantiated in the cpp, cannot be used with generic assembler
 // without adding template instantiation
@@ -123,6 +130,51 @@ namespace polyfem::assembler
 			const Eigen::MatrixXd &displacement_prev,
 			utils::MatrixCache &mat_cache,
 			StiffnessMatrix &grad) const { log_and_throw_error("Assemble hessian not implemented by {}!", name()); }
+
+		virtual bool has_ng_assembly_support() const { return false; }
+
+		virtual std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng(
+			const bool is_volume,
+			const int n_basis,
+			const AssemblyEssentials &bases) const
+		{
+			return std::nullopt;
+		}
+
+		virtual void assemble_gradient_ng(
+			const bool is_volume,
+			const int n_basis,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			const double t,
+			const double dt,
+			Span<double> grad,
+			const double scale) const
+		{
+			log_and_throw_error("NG assemble grad not implemented by {}!", name());
+		}
+
+		virtual void assemble_hessian_ng(
+			const bool is_volume,
+			const int n_basis,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			const double t,
+			const double dt,
+			BSRMatrix &hessian,
+			const bool project_to_psd,
+			const double scale) const
+		{
+			log_and_throw_error("NG assemble hessian not implemented by {}!", name());
+		}
 
 		// plotting (eg von mises), assembler is the name of the formulation
 		virtual void compute_scalar_value(

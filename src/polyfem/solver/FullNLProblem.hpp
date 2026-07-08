@@ -1,9 +1,12 @@
 #pragma once
 
 #include <polyfem/solver/forms/Form.hpp>
+#include <polyfem/utils/BlockCSRMatrix.hpp>
 #include <polysolve/nonlinear/Problem.hpp>
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace polyfem::solver
@@ -50,5 +53,8 @@ namespace polyfem::solver
 
 	protected:
 		std::vector<std::shared_ptr<Form>> forms_;
+		mutable int hessian_bsr_ndof_ = -1;
+		mutable std::vector<uint8_t> hessian_bsr_enabled_;
+		mutable std::optional<BSRMatrix> hessian_bsr_;
 	};
 } // namespace polyfem::solver

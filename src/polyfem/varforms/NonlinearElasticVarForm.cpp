@@ -639,7 +639,12 @@ namespace polyfem::varform
 			args["contact"]["epsv"],
 			args["solver"]["contact"]["friction_iterations"],
 			// Rayleigh damping form
-			args["solver"]["rayleigh_damping"]);
+			args["solver"]["rayleigh_damping"],
+			// Optional NG elastic assembly sources
+			space_.assembly.get(),
+			space_.geometry ? space_.geometry->assembly.get() : nullptr,
+			&ng_ass_cache_,
+			material_expr_registry_ ? &*material_expr_registry_ : nullptr);
 
 		for (const auto &form : forms)
 			form->set_output_dir(output_path);

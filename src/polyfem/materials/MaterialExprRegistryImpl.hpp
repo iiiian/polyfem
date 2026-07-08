@@ -166,7 +166,7 @@ namespace polyfem::material
 		template <template <typename> class T>
 		T<Expr> *set(int element, T<Expr> material)
 		{
-			return set(element, material);
+			return set<T<Expr>>(element, std::move(material));
 		}
 
 	private:
