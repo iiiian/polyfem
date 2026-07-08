@@ -534,6 +534,7 @@ namespace polyfem::varform
 					mass_quadrature_order,
 					integral_constraints,
 					*space.bases,
+					*space.assembly,
 					*space.bases,
 					space.poly_edge_to_data,
 					space.polys_3d);
@@ -547,7 +548,7 @@ namespace polyfem::varform
 						space_assembler.name(), dim, mesh_2d, space.n_bases,
 						quadrature_order,
 						mass_quadrature_order,
-						*space.bases, boundary.local_boundary, space.polys);
+						*space.bases, *space.assembly, boundary.local_boundary, space.polys);
 				}
 				else if (poly_basis_type == "Wachspress")
 				{
@@ -555,7 +556,7 @@ namespace polyfem::varform
 						space_assembler.name(), dim, mesh_2d, space.n_bases,
 						quadrature_order,
 						mass_quadrature_order,
-						*space.bases, boundary.local_boundary, space.polys);
+						*space.bases, *space.assembly, boundary.local_boundary, space.polys);
 				}
 				else
 				{
@@ -570,6 +571,7 @@ namespace polyfem::varform
 						mass_quadrature_order,
 						integral_constraints,
 						*space.bases,
+						*space.assembly,
 						*space.bases,
 						space.poly_edge_to_data,
 						space.polys);
@@ -596,6 +598,7 @@ namespace polyfem::varform
 					mass_quadrature_order,
 					integral_constraints,
 					*space.bases,
+					*space.assembly,
 					*space.geometry->bases,
 					space.poly_edge_to_data,
 					space.polys_3d);
@@ -609,7 +612,7 @@ namespace polyfem::varform
 						space_assembler.name(), dim, mesh_2d, space.n_bases,
 						quadrature_order,
 						mass_quadrature_order,
-						*space.bases, boundary.local_boundary, space.polys);
+						*space.bases, *space.assembly, boundary.local_boundary, space.polys);
 				}
 				else if (poly_basis_type == "Wachspress")
 				{
@@ -617,7 +620,7 @@ namespace polyfem::varform
 						space_assembler.name(), dim, mesh_2d, space.n_bases,
 						quadrature_order,
 						mass_quadrature_order,
-						*space.bases, boundary.local_boundary, space.polys);
+						*space.bases, *space.assembly, boundary.local_boundary, space.polys);
 				}
 				else
 				{
@@ -632,6 +635,7 @@ namespace polyfem::varform
 						mass_quadrature_order,
 						integral_constraints,
 						*space.bases,
+						*space.assembly,
 						*space.geometry->bases,
 						space.poly_edge_to_data,
 						space.polys);

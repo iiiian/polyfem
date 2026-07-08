@@ -2,6 +2,7 @@
 
 #include <polyfem/mesh/mesh2D/Mesh2D.hpp>
 #include <polyfem/basis/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/mesh/LocalBoundary.hpp>
 
 #include <Eigen/Dense>
@@ -14,6 +15,18 @@ namespace polyfem
 		class MVPolygonalBasis2d
 		{
 		public:
+			static int build_bases(
+				const std::string &assembler_name,
+				const int dim,
+				const mesh::Mesh2D &mesh,
+				const int n_bases,
+				const int quadrature_order,
+				const int mass_quadrature_order,
+				std::vector<ElementBases> &bases,
+				assembler::AssemblyEssentials &assembly,
+				std::vector<mesh::LocalBoundary> &local_boundary,
+				std::map<int, Eigen::MatrixXd> &mapped_boundary);
+
 			static int build_bases(
 				const std::string &assembler_name,
 				const int dim,

@@ -262,9 +262,19 @@ namespace polyfem
 			return eps;
 		}
 
-		int PolygonalBasis2d::build_bases(const LinearAssembler &assembler, const int n_samples_per_edge, const Mesh2D &mesh, const int n_bases,
-										  const int quadrature_order, const int mass_quadrature_order, const int integral_constraints, std::vector<ElementBases> &bases, const std::vector<ElementBases> &gbases,
-										  const std::map<int, InterfaceData> &poly_edge_to_data, std::map<int, Eigen::MatrixXd> &mapped_boundary)
+		int PolygonalBasis2d::build_bases(
+			const LinearAssembler &assembler,
+			const int n_samples_per_edge,
+			const Mesh2D &mesh,
+			const int n_bases,
+			const int quadrature_order,
+			const int mass_quadrature_order,
+			const int integral_constraints,
+			std::vector<ElementBases> &bases,
+			AssemblyEssentials &assembly,
+			const std::vector<ElementBases> &gbases,
+			const std::map<int, InterfaceData> &poly_edge_to_data,
+			std::map<int, Eigen::MatrixXd> &mapped_boundary)
 		{
 			assert(!mesh.is_volume());
 			if (poly_edge_to_data.empty())
@@ -394,9 +404,28 @@ namespace polyfem
 
 				// Polygon boundary after geometric mapping from neighboring elements
 				mapped_boundary[e] = collocation_points;
+				assembly.set_legacy_element(e, b);
 			}
 
 			return 0;
+		}
+
+		int PolygonalBasis2d::build_bases(
+			const LinearAssembler &assembler,
+			const int n_samples_per_edge,
+			const Mesh2D &mesh,
+			const int n_bases,
+			const int quadrature_order,
+			const int mass_quadrature_order,
+			const int integral_constraints,
+			std::vector<ElementBases> &bases,
+			const std::vector<ElementBases> &gbases,
+			const std::map<int, InterfaceData> &poly_edge_to_data,
+			std::map<int, Eigen::MatrixXd> &mapped_boundary)
+		{
+			AssemblyEssentials unused_assembly;
+			unused_assembly.element_desc.resize(mesh.n_elements());
+			return build_bases(assembler, n_samples_per_edge, mesh, n_bases, quadrature_order, mass_quadrature_order, integral_constraints, bases, unused_assembly, gbases, poly_edge_to_data, mapped_boundary);
 		}
 	} // namespace basis
 } // namespace polyfem

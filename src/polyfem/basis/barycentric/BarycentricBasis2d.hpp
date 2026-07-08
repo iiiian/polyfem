@@ -2,6 +2,7 @@
 
 #include <polyfem/mesh/mesh2D/Mesh2D.hpp>
 #include <polyfem/basis/ElementBases.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/mesh/LocalBoundary.hpp>
 
 #include <Eigen/Dense>
@@ -24,6 +25,7 @@ namespace polyfem
 				const std::function<void(const Eigen::MatrixXd &, const Eigen::RowVector2d &, Eigen::MatrixXd &, const double)> bc,
 				const std::function<void(const Eigen::MatrixXd &, const Eigen::RowVector2d &, Eigen::MatrixXd &, const double)> bc_prime,
 				std::vector<ElementBases> &bases,
+				assembler::AssemblyEssentials &assembly,
 				std::vector<mesh::LocalBoundary> &local_boundary,
 				std::map<int, Eigen::MatrixXd> &mapped_boundary);
 		};

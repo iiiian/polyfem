@@ -122,6 +122,65 @@ namespace polyfem::assembler
 
 			return basis;
 		}
+
+		bool is_built_element(const ElementDesc &desc)
+		{
+			return desc.quadrature_desc.dim >= 1
+				   && desc.quadrature_desc.dim <= 3
+				   && desc.mass_quadrature_desc.dim >= 1
+				   && desc.mass_quadrature_desc.dim <= 3
+				   && desc.basis_desc.dim >= 1
+				   && desc.basis_desc.dim <= 3
+				   && desc.basis_desc.basis_num > 0
+				   && desc.dof_mapping_range;
+		}
+
+		basis::BasisEvalCallback make_legacy_eval_callback(
+			const basis::ElementBases &legacy_element,
+			const int dim)
+		{
+			return [legacy_element, dim](
+					   const Span<const double> x,
+					   const Span<const double> y,
+					   const Span<const double> z,
+					   Span<double> values,
+					   Span<double> grad_x,
+					   Span<double> grad_y,
+					   Span<double> grad_z) {
+				const int n_points = static_cast<int>(x.size());
+				const int n_bases = static_cast<int>(legacy_element.bases.size());
+				assert(values.size() == n_bases * n_points);
+				assert(grad_x.size() == n_bases * n_points);
+				assert(dim < 2 || grad_y.size() == n_bases * n_points);
+				assert(dim < 3 || grad_z.size() == n_bases * n_points);
+
+				const Eigen::MatrixXd pts = span_components_to_points(x, y, z, dim);
+				std::vector<AssemblyValues> basis_values;
+				std::vector<AssemblyValues> basis_grads;
+				legacy_element.evaluate_bases(pts, basis_values);
+				legacy_element.evaluate_grads(pts, basis_grads);
+				assert(int(basis_values.size()) == n_bases);
+				assert(int(basis_grads.size()) == n_bases);
+
+				for (int local_basis_id = 0; local_basis_id < n_bases; ++local_basis_id)
+				{
+					assert(basis_values[local_basis_id].val.size() == n_points);
+					assert(basis_grads[local_basis_id].grad.rows() == n_points);
+					assert(basis_grads[local_basis_id].grad.cols() >= dim);
+
+					const int offset = local_basis_id * n_points;
+					for (int q = 0; q < n_points; ++q)
+					{
+						values[offset + q] = basis_values[local_basis_id].val(q);
+						grad_x[offset + q] = basis_grads[local_basis_id].grad(q, 0);
+						if (dim > 1)
+							grad_y[offset + q] = basis_grads[local_basis_id].grad(q, 1);
+						if (dim > 2)
+							grad_z[offset + q] = basis_grads[local_basis_id].grad(q, 2);
+					}
+				}
+			};
+		}
 	} // namespace
 
 	AssemblyEssentialsView AssemblyEssentials::view() const
@@ -156,6 +215,9 @@ namespace polyfem::assembler
 		for (int e = 0; e < int(element_desc.size()); ++e)
 		{
 			const ElementDesc &desc = element_desc[e];
+			if (!is_built_element(desc))
+				continue;
+
 			basis::ElementBases &legacy = (*legacy_bases_)[e];
 			legacy.has_parameterization = desc.basis_desc.is_parametric;
 
@@ -182,6 +244,80 @@ namespace polyfem::assembler
 		}
 
 		return legacy_bases_;
+	}
+
+	void AssemblyEssentials::set_legacy_element(
+		const int element_id,
+		const basis::ElementBases &legacy_element,
+		LocalNodeFromPrimitiveFunc local_node_from_primitive)
+	{
+		assert(element_id >= 0);
+		assert(element_id < int(element_desc.size()));
+		assert(!legacy_element.bases.empty());
+
+		quadrature::Quadrature quadrature;
+		legacy_element.compute_quadrature(quadrature);
+		quadrature::Quadrature mass_quadrature;
+		legacy_element.compute_mass_quadrature(mass_quadrature);
+		assert(quadrature.size() > 0);
+		assert(mass_quadrature.size() > 0);
+		assert(quadrature.points.cols() == mass_quadrature.points.cols());
+		const int dim = quadrature.points.cols();
+
+		ElementDesc desc{};
+		desc.quadrature_desc = quadrature_store.append(quadrature);
+		desc.mass_quadrature_desc = mass_quadrature_store.append(mass_quadrature);
+
+		auto &basis_desc = desc.basis_desc;
+		basis_desc.element_kind = dim == 3 ? basis::ElementKind::Polyhedron : basis::ElementKind::Polygon;
+		basis_desc.basis_family = basis::BasisFamily::Unknown;
+		basis_desc.order = legacy_element.bases.front().order();
+		basis_desc.orderq = basis_desc.order;
+		basis_desc.dim = dim;
+		basis_desc.basis_num = int(legacy_element.bases.size());
+		basis_desc.eval_callback_id = basis_store.append_eval_callback(make_legacy_eval_callback(legacy_element, dim));
+		basis_desc.is_parametric = legacy_element.has_parameterization;
+		basis_desc.is_bernstein = false;
+
+		int first_mapping_id = 0;
+		for (int local_basis_id = 0; local_basis_id < int(legacy_element.bases.size()); ++local_basis_id)
+		{
+			const auto &mapping = legacy_element.bases[local_basis_id].global();
+			assert(!mapping.empty());
+
+			std::vector<int> node_ids;
+			std::vector<double> weights;
+			std::vector<double> node_positions;
+			node_ids.reserve(mapping.size());
+			weights.reserve(mapping.size());
+			node_positions.reserve(mapping.size() * dim);
+
+			for (const auto &entry : mapping)
+			{
+				assert(entry.node.size() >= dim);
+				node_ids.push_back(entry.index);
+				weights.push_back(entry.val);
+				for (int d = 0; d < dim; ++d)
+					node_positions.push_back(entry.node(d));
+			}
+
+			const int mapping_id = dof_mapping_store.append(node_ids, weights, node_positions);
+			if (local_basis_id == 0)
+				first_mapping_id = mapping_id;
+		}
+		desc.dof_mapping_range = Range{first_mapping_id, basis_desc.basis_num};
+
+		element_desc[element_id] = desc;
+		if (legacy_local_nodes_from_primitive.size() < element_desc.size())
+			legacy_local_nodes_from_primitive.resize(element_desc.size());
+		legacy_local_nodes_from_primitive[element_id] = std::move(local_node_from_primitive);
+
+		if (legacy_bases_)
+			(*legacy_bases_)[element_id] = legacy_element;
+
+#ifdef POLYFEM_WITH_CUDA
+		need_host_device_sync_ = true;
+#endif
 	}
 
 	AssemblyValsCache AssemblyEssentials::legacy_assembly_vals_cache(

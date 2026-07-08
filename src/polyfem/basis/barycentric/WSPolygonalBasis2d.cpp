@@ -191,10 +191,27 @@ namespace polyfem
 			const int quadrature_order,
 			const int mass_quadrature_order,
 			std::vector<ElementBases> &bases,
+			assembler::AssemblyEssentials &assembly,
 			std::vector<mesh::LocalBoundary> &local_boundary,
 			std::map<int, Eigen::MatrixXd> &mapped_boundary)
 		{
-			return BarycentricBasis2d::build_bases(assembler_name, dim, mesh, n_bases, quadrature_order, mass_quadrature_order, wachspress, wachspress_derivative, bases, local_boundary, mapped_boundary);
+			return BarycentricBasis2d::build_bases(assembler_name, dim, mesh, n_bases, quadrature_order, mass_quadrature_order, wachspress, wachspress_derivative, bases, assembly, local_boundary, mapped_boundary);
+		}
+
+		int WSPolygonalBasis2d::build_bases(
+			const std::string &assembler_name,
+			const int dim,
+			const mesh::Mesh2D &mesh,
+			const int n_bases,
+			const int quadrature_order,
+			const int mass_quadrature_order,
+			std::vector<ElementBases> &bases,
+			std::vector<mesh::LocalBoundary> &local_boundary,
+			std::map<int, Eigen::MatrixXd> &mapped_boundary)
+		{
+			assembler::AssemblyEssentials unused_assembly;
+			unused_assembly.element_desc.resize(mesh.n_elements());
+			return build_bases(assembler_name, dim, mesh, n_bases, quadrature_order, mass_quadrature_order, bases, unused_assembly, local_boundary, mapped_boundary);
 		}
 
 	} // namespace basis

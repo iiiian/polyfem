@@ -137,7 +137,7 @@ namespace polyfem::basis
 		std::vector<double> values(expected_out_size);
 		std::vector<double> all_grad_x(expected_out_size);
 		std::vector<double> all_grad_y(desc.dim > 1 ? expected_out_size : 0);
-		std::vector<double> all_grad_z(desc.dim > 1 ? expected_out_size : 0);
+		std::vector<double> all_grad_z(desc.dim > 2 ? expected_out_size : 0);
 		callback(x, y, z, values, all_grad_x, all_grad_y, all_grad_z);
 
 		int offset = local_basis_index * x.size();

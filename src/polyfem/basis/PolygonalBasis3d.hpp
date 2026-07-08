@@ -2,6 +2,7 @@
 
 #include <polyfem/mesh/mesh3D/Mesh3D.hpp>
 #include <polyfem/assembler/Assembler.hpp>
+#include <polyfem/assembler/AssemblyEssentials.hpp>
 #include <polyfem/basis/ElementBases.hpp>
 #include <polyfem/assembler/ElementAssemblyValues.hpp>
 #include <polyfem/basis/InterfaceData.hpp>
@@ -53,6 +54,20 @@ namespace polyfem
 			/// @param[in]  values         Per-element shape functions for the PDE, evaluated over the element,  used for the system matrix assembly (used for linear reproduction)
 			/// @param[in]  gvalues        Per-element shape functions for the geometric mapping, evaluated over  the element (get boundary of the polygon)
 			///
+			static int build_bases(
+				const assembler::LinearAssembler &assembler,
+				const int n_samples_per_edge,
+				const mesh::Mesh3D &mesh,
+				const int n_bases,
+				const int quadrature_order,
+				const int mass_quadrature_order,
+				const int integral_constraints,
+				std::vector<ElementBases> &bases,
+				assembler::AssemblyEssentials &assembly,
+				const std::vector<ElementBases> &gbases,
+				const std::map<int, InterfaceData> &poly_face_to_data,
+				std::map<int, std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> &mapped_boundary);
+
 			static int build_bases(
 				const assembler::LinearAssembler &assembler,
 				const int n_samples_per_edge,

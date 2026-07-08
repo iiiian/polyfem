@@ -484,6 +484,7 @@ namespace polyfem
 			const int mass_quadrature_order,
 			const int integral_constraints,
 			std::vector<ElementBases> &bases,
+			AssemblyEssentials &assembly,
 			const std::vector<ElementBases> &gbases,
 			const std::map<int, InterfaceData> &poly_face_to_data,
 			std::map<int, std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> &mapped_boundary)
@@ -638,9 +639,28 @@ namespace polyfem
 				orient_closed_surface(triangulated_vertices, triangulated_faces, false); // stupid viewer is flipping all the faces
 				mapped_boundary[e].first = triangulated_vertices;
 				mapped_boundary[e].second = triangulated_faces;
+				assembly.set_legacy_element(e, b);
 			}
 
 			return 0;
+		}
+
+		int PolygonalBasis3d::build_bases(
+			const LinearAssembler &assembler,
+			const int nn_samples_per_edge,
+			const Mesh3D &mesh,
+			const int n_bases,
+			const int quadrature_order,
+			const int mass_quadrature_order,
+			const int integral_constraints,
+			std::vector<ElementBases> &bases,
+			const std::vector<ElementBases> &gbases,
+			const std::map<int, InterfaceData> &poly_face_to_data,
+			std::map<int, std::pair<Eigen::MatrixXd, Eigen::MatrixXi>> &mapped_boundary)
+		{
+			AssemblyEssentials unused_assembly;
+			unused_assembly.element_desc.resize(mesh.n_elements());
+			return build_bases(assembler, nn_samples_per_edge, mesh, n_bases, quadrature_order, mass_quadrature_order, integral_constraints, bases, unused_assembly, gbases, poly_face_to_data, mapped_boundary);
 		}
 	} // namespace basis
 } // namespace polyfem

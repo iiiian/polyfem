@@ -123,6 +123,7 @@ namespace polyfem
 			const std::function<void(const Eigen::MatrixXd &, const Eigen::RowVector2d &, Eigen::MatrixXd &, const double)> bc,
 			const std::function<void(const Eigen::MatrixXd &, const Eigen::RowVector2d &, Eigen::MatrixXd &, const double)> bc_prime,
 			std::vector<ElementBases> &bases,
+			AssemblyEssentials &assembly,
 			std::vector<LocalBoundary> &local_boundary,
 			std::map<int, Eigen::MatrixXd> &mapped_boundary)
 		{
@@ -221,7 +222,7 @@ namespace polyfem
 					}
 				});
 
-				b.set_local_node_from_primitive_func([e](const int primitive_id, const Mesh &mesh) {
+				LocalNodeFromPrimitiveFunc local_node_from_primitive = [e](const int primitive_id, const Mesh &mesh) {
 					const auto &mesh2d = dynamic_cast<const Mesh2D &>(mesh);
 					auto index = mesh2d.get_index_from_face(e);
 
@@ -237,7 +238,8 @@ namespace polyfem
 					result(0) = le;
 					result(1) = (le + 1) % mesh2d.n_face_vertices(e);
 					return result;
-				});
+				};
+				b.set_local_node_from_primitive_func(local_node_from_primitive);
 
 				// Set the bases which are nonzero inside the polygon
 				const int n_poly_bases = int(local_to_global.size());
@@ -249,6 +251,7 @@ namespace polyfem
 
 				// Polygon boundary after geometric mapping from neighboring elements
 				mapped_boundary[e] = polygon;
+				assembly.set_legacy_element(e, b, std::move(local_node_from_primitive));
 			}
 
 			return new_nodes.size();

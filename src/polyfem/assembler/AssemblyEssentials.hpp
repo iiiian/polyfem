@@ -73,6 +73,12 @@ namespace polyfem::assembler
 		[[deprecated("Use AssemblyEssentials packed data directly")]]
 		std::shared_ptr<std::vector<basis::ElementBases>> legacy_bases_ptr() const;
 
+		[[deprecated("Build basis data directly in AssemblyEssentials")]]
+		void set_legacy_element(
+			int element_id,
+			const basis::ElementBases &legacy_element,
+			LocalNodeFromPrimitiveFunc local_node_from_primitive = {});
+
 		[[deprecated("Use AssemblyEssentials packed data directly")]]
 		AssemblyValsCache legacy_assembly_vals_cache(
 			const AssemblyEssentials &geom_bases,
