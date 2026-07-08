@@ -82,28 +82,33 @@ namespace polyfem
 		}
 		std::sort(block_keys.begin(), block_keys.end());
 
-		// Count non zeros per row.
-		uint32_t prev_row = -1;
-		uint32_t count = 0;
+		int block_rows = rows_ / block_dim_;
+		row_ptr_.assign(block_rows + 1, 0);
 		for (uint64_t key : block_keys)
 		{
 			auto [row, col] = unpack(key);
-			if (row != prev_row)
-			{
-				row_ptr_.push_back(count);
-				prev_row = row;
-			}
+			assert(row < static_cast<uint32_t>(block_rows));
+			row_ptr_[row + 1]++;
 			col_idx_.push_back(col);
-			++count;
 		}
-		row_ptr_.push_back(count);
+		for (int row = 0; row < block_rows; ++row)
+			row_ptr_[row + 1] += row_ptr_[row];
 
-		value_size_ = block_dim_ * block_dim_ * count;
+		value_size_ = block_dim_ * block_dim_ * static_cast<int>(col_idx_.size());
+	}
+
+	BSRMatrix::BSRMatrix(int rows, int cols)
+		: rows_(rows), cols_(cols), block_dim_(1), value_size_(0)
+	{
+		assert(rows >= 0);
+		assert(cols >= 0);
+		// block_dim = 1, no static BSR entries. row_ptr_ has one zero per row + sentry.
+		row_ptr_.assign(rows + 1, 0);
 	}
 
 	void BSRMatrix::clear_storage()
 	{
-		values_ = {};
+		static_values_ = {};
 
 #ifdef POLYFEM_WITH_CUDA
 		need_host_device_sync_ = true;
@@ -113,15 +118,86 @@ namespace polyfem
 #endif
 	}
 
-	BSRMatrixView BSRMatrix::view()
+	bool BSRMatrix::has_allocate_host_value() const
 	{
-		if (values_.empty())
-			values_.resize(value_size_, 0.0);
-		return BSRMatrixView{rows_, cols_, block_dim_, row_ptr_, col_idx_, values_};
+		return !static_values_.empty();
+	}
+
+	bool BSRMatrix::has_allocate_device_value() const
+	{
+#ifdef POLYFEM_WITH_CUDA
+		return d_values_.has_value();
+#else
+		return false;
+#endif
+	}
+
+	void BSRMatrix::reset()
+	{
+		std::fill(static_values_.begin(), static_values_.end(), 0.0);
+		dynamic_values_.clear();
+
+#ifdef POLYFEM_WITH_CUDA
+		if (d_values_)
+		{
+			CudaExecutionPolicy policy;
+			cuda::fill_bytes(policy.stream, *d_values_, 0);
+			policy.stream.sync();
+		}
+#endif
+	}
+
+	BSRMatrixMutableView BSRMatrix::static_view()
+	{
+		if (static_values_.empty())
+			static_values_.resize(value_size_, 0.0);
+		return BSRMatrixMutableView{rows_, cols_, block_dim_, row_ptr_, col_idx_, static_values_};
+	}
+
+	StiffnessMatrix BSRMatrix::to_stiffness_matrix()
+	{
+		assert(block_dim_ > 0);
+		assert(rows_ % block_dim_ == 0);
+		assert(cols_ % block_dim_ == 0);
+
+		int bd = block_dim_;
+		int block_size = bd * bd;
+
+		BSRMatrixMutableView bsr = static_view();
+
+		std::vector<Eigen::Triplet<double>> entries;
+		entries.reserve(bsr.values.size() + dynamic_values_.size());
+
+		for (int br = 0; br < bsr.block_rows(); ++br)
+		{
+			for (int p = bsr.row_ptr[br]; p < bsr.row_ptr[br + 1]; ++p)
+			{
+				int bc = bsr.col_idx[p];
+				const double *block = bsr.values.data() + p * block_size;
+
+				for (int i = 0; i < bd; ++i)
+				{
+					for (int j = 0; j < bd; ++j)
+					{
+						double value = block[i * bd + j];
+						if (value != 0.0)
+						{
+							entries.emplace_back(br * bd + i, bc * bd + j, value);
+						}
+					}
+				}
+			}
+		}
+
+		entries.insert(entries.end(), dynamic_values_.begin(), dynamic_values_.end());
+
+		StiffnessMatrix out(rows_, cols_);
+		out.setFromTriplets(entries.begin(), entries.end());
+		return out;
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	BSRMatrixView BSRMatrix::device_view(CudaExecutionPolicy policy)
+	BSRMatrixMutableView BSRMatrix::device_view(CudaExecutionPolicy policy)
 	{
 		auto &p = policy;
 		if (need_host_device_sync_)
@@ -136,7 +212,7 @@ namespace polyfem
 			need_host_device_sync_ = false;
 			p.stream.sync();
 		}
-		return BSRMatrixView{rows_, cols_, block_dim_, *d_row_ptr_, *d_col_idx_, *d_values_};
+		return BSRMatrixMutableView{rows_, cols_, block_dim_, *d_row_ptr_, *d_col_idx_, *d_values_};
 	}
 
 #endif

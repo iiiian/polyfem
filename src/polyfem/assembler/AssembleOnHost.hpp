@@ -467,7 +467,8 @@ namespace polyfem::assembler
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> vector_out,
-		double time = 0.0)
+		double time = 0.0,
+		double extra_scaling = 1.0)
 	{
 		constexpr int VALUE_DIM = VectorKernel::VALUE_DIM;
 
@@ -503,6 +504,12 @@ namespace polyfem::assembler
 					time,
 					local_vector);
 
+				if (extra_scaling != 1.0)
+				{
+					for (double &value : local_vector_storage)
+						value *= extra_scaling;
+				}
+
 				host_detail::scatter_element_vector(
 					elem_desc,
 					bases_view.dof_mapping_store,
@@ -523,7 +530,8 @@ namespace polyfem::assembler
 		Span<const double> unknown,
 		BSRMatrixMutableView matrix_out,
 		bool project_to_psd = false,
-		double time = 0.0)
+		double time = 0.0,
+		double extra_scaling = 1.0)
 	{
 		constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
 		assert(matrix_out.block_dim == VALUE_DIM);
@@ -563,6 +571,11 @@ namespace polyfem::assembler
 				if (project_to_psd)
 				{
 					local_matrix = ipc::project_to_psd(local_matrix);
+				}
+
+				if (extra_scaling != 1.0)
+				{
+					local_matrix *= extra_scaling;
 				}
 
 				host_detail::scatter_element_matrix(

@@ -239,7 +239,8 @@ namespace polyfem::assembler
 			Span<const VectorAssemblyTask> tasks,
 			Span<const typename VectorKernel::Material> materials,
 			Span<const double> unknown,
-			Span<double> vec_out)
+			Span<double> vec_out,
+			double extra_scaling)
 		{
 			constexpr int VALUE_DIM = VectorKernel::VALUE_DIM;
 
@@ -274,6 +275,7 @@ namespace polyfem::assembler
 
 			if (!grad_i.isZero())
 			{
+				grad_i *= extra_scaling;
 				Span<const double> grad_i_span(grad_i.data(), grad_i.size());
 				scatter_vec_i<VALUE_DIM>(elem_id, basis_id, bases, grad_i_span, vec_out);
 			}
@@ -286,7 +288,8 @@ namespace polyfem::assembler
 			Span<const MatrixAssemblyTask> tasks,
 			Span<const typename MatrixKernel::Material> materials,
 			Span<const double> unknown,
-			BSRMatrixMutableView mat_out)
+			BSRMatrixMutableView mat_out,
+			double extra_scaling)
 		{
 			constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
 
@@ -322,6 +325,7 @@ namespace polyfem::assembler
 
 			if (!hess_ij.isZero())
 			{
+				hess_ij *= extra_scaling;
 				Span<const double> hess_ij_span(hess_ij.data(), hess_ij.size());
 				scatter_mat_ij<VALUE_DIM>(elem_id, bi, bj, bases, hess_ij_span, mat_out);
 				if (bj > bi)
@@ -425,7 +429,8 @@ namespace polyfem::assembler
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> vec_out,
-		CudaExecutionPolicy policy = {})
+		CudaExecutionPolicy policy = {},
+		double extra_scaling = 1.0)
 	{
 		auto &p = policy;
 
@@ -506,7 +511,8 @@ namespace polyfem::assembler
 				d_vector_tasks,
 				d_materials,
 				d_unknown,
-				vec_out);
+				vec_out,
+				extra_scaling);
 		}
 		p.stream.sync();
 	}
@@ -518,7 +524,8 @@ namespace polyfem::assembler
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		BSRMatrixMutableView mat_out,
-		CudaExecutionPolicy policy = {})
+		CudaExecutionPolicy policy = {},
+		double extra_scaling = 1.0)
 	{
 		auto &p = policy;
 
@@ -557,7 +564,8 @@ namespace polyfem::assembler
 				d_matrix_tasks,
 				d_materials,
 				d_unknown,
-				mat_out);
+				mat_out,
+				extra_scaling);
 		}
 		p.stream.sync();
 	}

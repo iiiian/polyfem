@@ -2,6 +2,9 @@
 
 #include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/CudaBoth.hpp>
+#include <polyfem/utils/Types.hpp>
+
+#include <Eigen/SparseCore>
 
 #include <vector>
 #include <unordered_set>
@@ -65,7 +68,7 @@ namespace polyfem
 			if (!block_ptr)
 				return nullptr;
 
-			return block_ptr + i * block_dim + j;
+			return block_ptr + (i % block_dim) * block_dim + (j % block_dim);
 		}
 	};
 
@@ -79,7 +82,8 @@ namespace polyfem
 
 		std::vector<int> row_ptr_;
 		std::vector<int> col_idx_;
-		std::vector<double> values_;
+		std::vector<double> static_values_;
+		std::vector<Eigen::Triplet<double>> dynamic_values_;
 
 #ifdef POLYFEM_WITH_CUDA
 		bool need_host_device_sync_ = true;
@@ -91,16 +95,32 @@ namespace polyfem
 
 	public:
 		BSRMatrix(const BSRSparsityPattern &sparsity);
+		/// Construct a block_dim = 1 matrix with no static BSR entries (dynamic-only).
+		BSRMatrix(int rows, int cols);
 
-		/// Lazily allocate zero initialized value array and return matrix view.
-		BSRMatrixMutableView view();
+		/// Lazily allocate zero initialized static value array and return matrix view.
+		BSRMatrixMutableView static_view();
 
-		/// Clear host value storage and all device storage. Keep topology data.
+		/// Access the dynamic (triplet) entries.
+		std::vector<Eigen::Triplet<double>> &dynamic_view() { return dynamic_values_; }
+
+		/// Convert the static BSR and dynamic triplets into an Eigen StiffnessMatrix.
+		StiffnessMatrix to_stiffness_matrix();
+
+		/// Reset host/device static value arrays to zero if they are allocated, and clear dynamic entries.
+		void reset();
+		bool has_allocate_host_value() const;
+		bool has_allocate_device_value() const;
+
+		/// Clear static host value storage and all device storage. Keep topology data.
 		void clear_storage();
 
 #ifdef POLYFEM_WITH_CUDA
-		/// Lazily copy topology to device, allocate zero initialized value array, and return device matrix view.
+		/// Lazily copy topology to device, allocate zero initialized static value array, and return device matrix view.
 		BSRMatrixMutableView device_view(CudaExecutionPolicy policy = {});
+
+		/// Convert to StiffnessMatrix using the device (CUDA) path. Falls back to host path if device values are not allocated.
+		StiffnessMatrix to_stiffness_matrix_device(CudaExecutionPolicy policy = {});
 #endif
 	};
 } // namespace polyfem

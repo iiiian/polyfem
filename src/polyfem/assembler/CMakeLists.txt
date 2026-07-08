@@ -86,8 +86,6 @@ set(SOURCES
 	VolumePenalty.cpp
 	SumModel.hpp
 	SumModel.cpp
-  ScatterLocalAssembly.cpp
-  ScatterLocalAssembly.hpp
   DofMappingStore.hpp
   DofMappingStore.cpp
   ElementBases.hpp
@@ -95,7 +93,7 @@ set(SOURCES
 )
 
 if(POLYFEM_WITH_CUDA)
-  set_source_files_properties(AssemblyCache.cpp PROPERTIES LANGUAGE CUDA)
+	set_source_files_properties(AssemblyCache.cpp PROPERTIES LANGUAGE CUDA)
 endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})

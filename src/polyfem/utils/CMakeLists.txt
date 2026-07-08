@@ -1,9 +1,9 @@
 set(SOURCES
 	autodiff.h
 	AutodiffTypes.hpp
-	BSRToStiffnessMatrix.cpp
-	BSRToStiffnessMatrix.hpp
 	Bessel.hpp
+	BlockCSRMatrix.cpp
+	BlockCSRMatrix.hpp
 	BoundarySampler.cpp
 	BoundarySampler.hpp
 	ClipperUtils.cpp
@@ -68,8 +68,7 @@ set(SOURCES
 
 if(POLYFEM_WITH_CUDA)
 	list(APPEND SOURCES
-		BSRToStiffnessMatrix.cu
-		BSRToStiffnessMatrix.cuh
+		BlockCSRMatrix.cu
 	)
 endif()
 

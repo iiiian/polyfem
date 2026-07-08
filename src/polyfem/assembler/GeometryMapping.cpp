@@ -39,9 +39,9 @@ namespace polyfem::assembler
 			int local_basis_id)
 		{
 			const int mapping_id = geom_elem_desc.dof_mapping_range.offset + local_basis_id;
-			const auto node_ids = geom_bases.dof_mapping.get_node_ids(mapping_id);
-			const auto weights = geom_bases.dof_mapping.get_weights(mapping_id);
-			const auto node_positions = geom_bases.dof_mapping.get_positions(mapping_id);
+			const auto node_ids = geom_bases.dof_mapping_store.get_node_ids(mapping_id);
+			const auto weights = geom_bases.dof_mapping_store.get_weights(mapping_id);
+			const auto node_positions = geom_bases.dof_mapping_store.get_positions(mapping_id);
 
 			Eigen::Vector<double, dim> result = Eigen::Vector<double, dim>::Zero();
 			for (int i = 0; i < node_ids.size(); ++i)
@@ -116,7 +116,7 @@ namespace polyfem::assembler
 		assert(geom_basis_values.size() == geom_basis_num * quad_num);
 		basis::basis_values(
 			geom_elem_desc.basis_desc,
-			geom_bases.basis,
+			geom_bases.basis_store,
 			x,
 			y,
 			z,
@@ -193,7 +193,7 @@ namespace polyfem::assembler
 
 		basis::basis_value_and_gradients(
 			geom_elem_desc.basis_desc,
-			geom_bases.basis,
+			geom_bases.basis_store,
 			x,
 			y,
 			z,
