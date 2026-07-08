@@ -466,10 +466,12 @@ namespace polyfem::varform
 			if (!has_obstacle_rows)
 				return sample.points.rows() == 0 || sample.points.rows() == sampled_values.rows();
 
-			sampled_values.conservativeResize(sampled_values.rows() + obstacle->n_vertices(), sampled_values.cols());
-			if (dof_values.rows() >= obstacle->ndof())
+			const int field_dim = sampled_values.cols();
+			const int obstacle_field_ndof = obstacle->n_vertices() * field_dim;
+			sampled_values.conservativeResize(sampled_values.rows() + obstacle->n_vertices(), field_dim);
+			if (dof_values.rows() >= obstacle_field_ndof)
 				sampled_values.bottomRows(obstacle->n_vertices()) =
-					utils::unflatten(dof_values.bottomRows(obstacle->ndof()), sampled_values.cols());
+					utils::unflatten(dof_values.bottomRows(obstacle_field_ndof), field_dim);
 			else
 				sampled_values.bottomRows(obstacle->n_vertices()).setZero();
 			return true;
