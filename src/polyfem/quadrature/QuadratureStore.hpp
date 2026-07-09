@@ -64,11 +64,11 @@ namespace polyfem::quadrature
 		std::vector<double> w_; //< Quadrature weight.
 
 #ifdef POLYFEM_WITH_CUDA
-		bool need_host_device_sync_ = true;
-		DeviceBuf<double> d_x_;
-		DeviceBuf<double> d_y_;
-		DeviceBuf<double> d_z_;
-		DeviceBuf<double> d_w_;
+		mutable bool need_host_device_sync_ = true;
+		mutable DeviceBuf<double> d_x_;
+		mutable DeviceBuf<double> d_y_;
+		mutable DeviceBuf<double> d_z_;
+		mutable DeviceBuf<double> d_w_;
 #endif
 
 	public:
@@ -79,7 +79,7 @@ namespace polyfem::quadrature
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.
-		QuadratureStoreView device_view(ExecutionPolicy policy);
+		QuadratureStoreView device_view(ExecutionPolicy policy) const;
 
 		/// Release device storage.
 		void clear_device_storage();

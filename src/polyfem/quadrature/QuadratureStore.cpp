@@ -121,7 +121,7 @@ namespace polyfem::quadrature
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	QuadratureStoreView QuadratureStore::device_view(ExecutionPolicy policy)
+	QuadratureStoreView QuadratureStore::device_view(ExecutionPolicy policy) const
 	{
 		auto &p = policy;
 		if (need_host_device_sync_)

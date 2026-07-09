@@ -1,6 +1,6 @@
 #include "NeoHookeanElasticity.hpp"
 
-#include <polyfem/assembler/AssembleOnHost.hpp>
+#include <polyfem/assembler/Assemble.hpp>
 #include <polyfem/assembler/ComputeSparsityPattern.hpp>
 #include <polyfem/assembler/ng/AutoDiffKernel.hpp>
 #include <polyfem/assembler/ng/NeohookeanEnergy.hpp>
@@ -39,6 +39,78 @@ namespace polyfem::assembler
 		return compute_sparsity_pattern(bases.view(), n_basis, size());
 	}
 
+	double NeoHookeanElasticity::assemble_energy_ng(
+		const bool is_volume,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
+		const AssemblyCache &cache,
+		const material::MaterialExprRegistry &materials,
+		Span<const double> x,
+		Span<const double> x_prev,
+		const double t,
+		const double dt,
+		ExecutionPolicy policy) const
+	{
+		(void)x_prev;
+		(void)dt;
+		assert(has_ng_assembly_support());
+		assert(size() == ng_dimension(is_volume));
+
+		switch (size())
+		{
+		case 2:
+		{
+			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<2>>;
+			return assemble_scalar<Kernel>(bases, geom_bases, cache, materials, x, t, policy);
+		}
+		case 3:
+		{
+			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<3>>;
+			return assemble_scalar<Kernel>(bases, geom_bases, cache, materials, x, t, policy);
+		}
+		default:
+			log_and_throw_error("Unsupported NG NeoHookean dimension {}.", size());
+		}
+	}
+
+	void NeoHookeanElasticity::assemble_energy_per_element_ng(
+		const bool is_volume,
+		const AssemblyEssentials &bases,
+		const AssemblyEssentials &geom_bases,
+		const AssemblyCache &cache,
+		const material::MaterialExprRegistry &materials,
+		Span<const double> x,
+		Span<const double> x_prev,
+		const double t,
+		const double dt,
+		DualVector &energy,
+		ExecutionPolicy policy) const
+	{
+		(void)x_prev;
+		(void)dt;
+		assert(has_ng_assembly_support());
+		assert(size() == ng_dimension(is_volume));
+		assert(energy.size() == bases.element_desc.size());
+
+		switch (size())
+		{
+		case 2:
+		{
+			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<2>>;
+			assemble_scalar_per_element<Kernel>(bases, geom_bases, cache, materials, x, energy, t, policy);
+			break;
+		}
+		case 3:
+		{
+			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<3>>;
+			assemble_scalar_per_element<Kernel>(bases, geom_bases, cache, materials, x, energy, t, policy);
+			break;
+		}
+		default:
+			log_and_throw_error("Unsupported NG NeoHookean dimension {}.", size());
+		}
+	}
+
 	void NeoHookeanElasticity::assemble_gradient_ng(
 		const bool is_volume,
 		const int n_basis,
@@ -50,11 +122,10 @@ namespace polyfem::assembler
 		Span<const double> x_prev,
 		const double t,
 		const double dt,
-		Span<double> grad,
+		DualVector &grad,
 		const double scale,
 		ExecutionPolicy policy) const
 	{
-		(void)policy;
 		(void)n_basis;
 		(void)x_prev;
 		(void)dt;
@@ -67,13 +138,13 @@ namespace polyfem::assembler
 		case 2:
 		{
 			using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<2>>;
-			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale);
+			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale, policy);
 			break;
 		}
 		case 3:
 		{
 			using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<3>>;
-			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale);
+			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale, policy);
 			break;
 		}
 		default:
@@ -97,7 +168,6 @@ namespace polyfem::assembler
 		const double scale,
 		ExecutionPolicy policy) const
 	{
-		(void)policy;
 		(void)n_basis;
 		(void)x_prev;
 		(void)dt;
@@ -113,7 +183,7 @@ namespace polyfem::assembler
 			using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<2>>;
 			assemble_matrix<Kernel>(
 				bases, geom_bases, cache, materials, x,
-				hessian.static_view(), project_to_psd, t, scale);
+				hessian, project_to_psd, t, scale, false, policy);
 			break;
 		}
 		case 3:
@@ -121,7 +191,7 @@ namespace polyfem::assembler
 			using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<3>>;
 			assemble_matrix<Kernel>(
 				bases, geom_bases, cache, materials, x,
-				hessian.static_view(), project_to_psd, t, scale);
+				hessian, project_to_psd, t, scale, false, policy);
 			break;
 		}
 		default:

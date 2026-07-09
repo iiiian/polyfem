@@ -156,35 +156,6 @@ namespace polyfem
 			csc_vals[sid] = sum;
 		}
 
-		StiffnessMatrix stiffness_from_csc(int rows,
-										   int cols,
-										   const std::vector<int> &col_ptr,
-										   const std::vector<int> &row_idx,
-										   const std::vector<double> &values)
-		{
-			using StorageIndex = StiffnessMatrix::StorageIndex;
-
-			if (values.empty())
-			{
-				StiffnessMatrix out(rows, cols);
-				return out;
-			}
-
-			std::vector<StorageIndex> outer(col_ptr.begin(), col_ptr.end());
-			std::vector<StorageIndex> inner(row_idx.begin(), row_idx.end());
-
-			const Eigen::Map<const Eigen::SparseMatrix<double, Eigen::ColMajor, StorageIndex>> mapped(
-				rows,
-				cols,
-				static_cast<StorageIndex>(values.size()),
-				outer.data(),
-				inner.data(),
-				values.data());
-
-			StiffnessMatrix out = mapped;
-			return out;
-		}
-
 		__global__ void add_values(Span<double> dst, Span<const double> src)
 		{
 			int id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -196,9 +167,9 @@ namespace polyfem
 			dst[id] += src[id];
 		}
 
-		StiffnessMatrix bsr_to_stiffness_matrix_device_impl(
+		StiffnessMatrix bsr_to_stiffness_matrix_impl(
 			BSRMatrixMutableView bsr,
-			Span<const Eigen::Triplet<double>> triplets,
+			Span<const Eigen::Triplet<double>> triplets, // on host
 			ExecutionPolicy policy)
 		{
 			assert(bsr.block_dim > 0);
@@ -206,27 +177,26 @@ namespace polyfem
 			assert(bsr.cols % bsr.block_dim == 0);
 			static_assert(std::is_same_v<StiffnessMatrix::Scalar, double>);
 
-			const int block_dim = bsr.block_dim;
-			const int block_size = block_dim * block_dim;
+			int block_dim = bsr.block_dim;
+			int block_size = block_dim * block_dim;
 			if (bsr.col_idx.size() > static_cast<std::size_t>(std::numeric_limits<int>::max() / block_size)
 				|| triplets.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
 			{
 				throw std::runtime_error("BSR to StiffnessMatrix input is too large. Non-zero number exceeding int32 max.");
 			}
 
-			const int block_nnz = static_cast<int>(bsr.col_idx.size());
-			const int bsr_scalar_nnz = block_nnz * block_size;
-			const int triplet_nnz = static_cast<int>(triplets.size());
+			int block_nnz = static_cast<int>(bsr.col_idx.size());
+			int bsr_scalar_nnz = block_nnz * block_size;
+			int triplet_nnz = static_cast<int>(triplets.size());
 			if (triplet_nnz > std::numeric_limits<int>::max() - bsr_scalar_nnz)
 			{
 				throw std::runtime_error("BSR to StiffnessMatrix input is too large. Non-zero number exceeding int32 max.");
 			}
-			const int nnz_total = bsr_scalar_nnz + triplet_nnz;
+			int nnz_total = bsr_scalar_nnz + triplet_nnz;
 
 			if (nnz_total == 0)
 			{
 				StiffnessMatrix out(bsr.rows, bsr.cols);
-				out.makeCompressed();
 				return out;
 			}
 
@@ -457,36 +427,38 @@ namespace polyfem
 			csc_vals.destroy();
 
 			policy.stream->sync();
-			return stiffness_from_csc(bsr.rows, bsr.cols, h_col_ptr, h_row_idx, h_values);
+
+			static_assert(std::is_same_v<int, StiffnessMatrix::StorageIndex>, "NG assembly path does not support large index.");
+			Eigen::Map<const StiffnessMatrix> mapped(
+				bsr.rows,
+				bsr.cols,
+				h_values.size(),
+				h_col_ptr.data(),
+				h_row_idx.data(),
+				h_values.data());
+			return mapped;
 		}
+
 	} // namespace
 
 	StiffnessMatrix BSRMatrix::to_stiffness_matrix_device(ExecutionPolicy policy)
 	{
-		if (!has_allocate_device_value())
-		{
-			return to_stiffness_matrix();
-		}
-
-		BSRMatrixMutableView device_view = this->device_view(policy);
-
+		BSRMatrixMutableView device_view = this->device_static_view(policy);
+		// If host static view exists, sum the value array into device value ptr.
 		if (has_allocate_host_value())
 		{
 			BSRMatrixMutableView host_view = static_view();
-			assert(host_view.values.size() == device_view.values.size());
-
 			auto host_values = cuda::make_buffer<double>(
 				*policy.stream,
 				*policy.mr,
 				host_view.values.size(),
 				cuda::no_init);
 			cuda::copy_bytes(*policy.stream, host_view.values, host_values);
+
 			int grid_num = div_round_up(device_view.values.size(), 128);
 			add_values<<<grid_num, 128, 0, policy.stream->get()>>>(device_view.values, host_values);
-			policy.stream->sync();
 		}
-
-		return bsr_to_stiffness_matrix_device_impl(device_view, dynamic_values_, policy);
+		return bsr_to_stiffness_matrix_impl(device_view, dynamic_values_, policy);
 	}
 
 } // namespace polyfem

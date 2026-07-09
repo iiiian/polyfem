@@ -49,7 +49,7 @@ namespace polyfem::basis
 
 		// Some basis does not support descriptor based eval. Use fallback callback.
 #ifdef __CUDA_ARCH__
-		assert(false && "Basis eval callback is not supported on device")
+		assert(false && "Basis eval callback is not supported on device");
 #else
 		assert(desc.eval_callback_id >= 0 && desc.eval_callback_id < store.eval_callbacks.size());
 		assert(local_basis_index >= 0 && local_basis_index < desc.basis_num);
@@ -90,7 +90,7 @@ namespace polyfem::basis
 
 		// Some basis does not support descriptor based eval. Use fallback callback.
 #ifdef __CUDA_ARCH__
-		assert(false && "Basis eval callback is not supported on device")
+		assert(false && "Basis eval callback is not supported on device");
 #else
 		assert(desc.eval_callback_id >= 0 && desc.eval_callback_id < store.eval_callbacks.size());
 		int expected_out_size = desc.basis_num * x.size();
@@ -126,7 +126,7 @@ namespace polyfem::basis
 
 		// Some basis does not support descriptor based eval. Use fallback callback.
 #ifdef __CUDA_ARCH__
-		assert(false && "Basis eval callback is not supported on device")
+		assert(false && "Basis eval callback is not supported on device");
 #else
 		assert(desc.eval_callback_id >= 0 && desc.eval_callback_id < store.eval_callbacks.size());
 		assert(local_basis_index >= 0 && local_basis_index < desc.basis_num);
@@ -185,7 +185,7 @@ namespace polyfem::basis
 
 		// Some basis does not support descriptor based eval. Use fallback callback.
 #ifdef __CUDA_ARCH__
-		assert(false && "Basis eval callback is not supported on device")
+		assert(false && "Basis eval callback is not supported on device");
 #else
 		assert(desc.eval_callback_id >= 0 && desc.eval_callback_id < store.eval_callbacks.size());
 		int expected_out_size = desc.basis_num * x.size();
@@ -221,7 +221,7 @@ namespace polyfem::basis
 
 		// Some basis does not support descriptor based eval. Use fallback callback.
 #ifdef __CUDA_ARCH__
-		assert(false && "Basis eval callback is not supported on device")
+		assert(false && "Basis eval callback is not supported on device");
 #else
 		assert(desc.eval_callback_id >= 0 && desc.eval_callback_id < store.eval_callbacks.size());
 		int expected_out_size = desc.basis_num * x.size();

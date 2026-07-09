@@ -12,6 +12,7 @@
 #include <polyfem/utils/ElasticityUtils.hpp>
 #include <polyfem/utils/AutodiffTypes.hpp>
 #include <polyfem/utils/BlockCSRMatrix.hpp>
+#include <polyfem/utils/DualVector.hpp>
 #include <polyfem/utils/Logger.hpp>
 #include <polyfem/utils/Span.hpp>
 
@@ -103,6 +104,37 @@ namespace polyfem::assembler
 			const Eigen::MatrixXd &displacement,
 			const Eigen::MatrixXd &displacement_prev) const { log_and_throw_error("Assemble energy not implemented by {}!", name()); }
 
+		virtual double assemble_energy_ng(
+			const bool is_volume,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			const double t,
+			const double dt,
+			ExecutionPolicy policy) const
+		{
+			log_and_throw_error("NG assemble energy not implemented by {}!", name());
+		}
+
+		virtual void assemble_energy_per_element_ng(
+			const bool is_volume,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			const double t,
+			const double dt,
+			DualVector &energy,
+			ExecutionPolicy policy) const
+		{
+			log_and_throw_error("NG assemble energy per element not implemented by {}!", name());
+		}
+
 		// assemble gradient of energy (rhs)
 		virtual void assemble_gradient(
 			const bool is_volume,
@@ -152,7 +184,7 @@ namespace polyfem::assembler
 			Span<const double> x_prev,
 			const double t,
 			const double dt,
-			Span<double> grad,
+			DualVector &grad,
 			const double scale,
 			ExecutionPolicy policy) const
 		{

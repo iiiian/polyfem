@@ -46,7 +46,12 @@ set(SOURCES
 )
 
 if(POLYFEM_WITH_CUDA)
-	set_source_files_properties(EvalBasis.cpp EvalLagrangeBasis.cpp EvalRationalBasis.cpp PROPERTIES LANGUAGE CUDA)
+	set_source_files_properties(
+		EvalBasis.cpp
+		EvalLagrangeBasis.cpp
+		EvalRationalBasis.cpp
+		TARGET_DIRECTORY polyfem
+		PROPERTIES LANGUAGE CUDA)
 endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})

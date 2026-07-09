@@ -9,6 +9,8 @@ set(SOURCES
 	ClipperUtils.cpp
 	ClipperUtils.hpp
 	DisableWarnings.hpp
+	DualVector.cpp
+	DualVector.hpp
 	EdgeSampler.cpp
 	EdgeSampler.hpp
 	ElasticityUtils.cpp
@@ -65,7 +67,9 @@ set(SOURCES
 	svd/Tools.h
 	svd.hpp
   tcb_span.hpp
-  Span.hpp
+ 	Span.hpp
+	AtomicAdd.cpp
+	AtomicAdd.hpp
 )
 
 if(POLYFEM_WITH_CUDA)

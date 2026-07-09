@@ -338,7 +338,7 @@ namespace polyfem::assembler
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	AssemblyEssentialsView AssemblyEssentials::device_view(ExecutionPolicy policy)
+	AssemblyEssentialsView AssemblyEssentials::device_view(ExecutionPolicy policy) const
 	{
 		auto &p = policy;
 		if (need_host_device_sync_)

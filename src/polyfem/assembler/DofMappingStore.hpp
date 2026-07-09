@@ -56,11 +56,11 @@ namespace polyfem::assembler
 		std::vector<double> node_positions_;
 
 #ifdef POLYFEM_WITH_CUDA
-		bool need_host_device_sync_ = true;
-		DeviceBuf<DofMappingDesc> d_mapping_desc_;
-		DeviceBuf<int> d_node_ids_;
-		DeviceBuf<double> d_weights_;
-		DeviceBuf<double> d_node_positions_;
+		mutable bool need_host_device_sync_ = true;
+		mutable DeviceBuf<DofMappingDesc> d_mapping_desc_;
+		mutable DeviceBuf<int> d_node_ids_;
+		mutable DeviceBuf<double> d_weights_;
+		mutable DeviceBuf<double> d_node_positions_;
 #endif
 
 	public:
@@ -70,7 +70,7 @@ namespace polyfem::assembler
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.
-		DofMappingStoreView device_view(ExecutionPolicy policy);
+		DofMappingStoreView device_view(ExecutionPolicy policy) const;
 
 		/// Release device storage.
 		void clear_device_storage();

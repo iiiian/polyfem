@@ -27,8 +27,8 @@ namespace polyfem::varform
 		/// Number of globally indexed scalar geometry basis functions.
 		int n_bases = 0;
 
-		/// Per-element scalar bases used to interpolate physical coordinates.
-		std::shared_ptr<assembler::AssemblyEssentials> assembly;
+		/// SOA data storage for basis, quadrature, and dof mapping.
+		std::shared_ptr<assembler::AssemblyEssentials> assembly_essentials;
 
 		/// Deprecated compatibility view of assembly.
 		mutable std::shared_ptr<std::vector<basis::ElementBases>> bases;
@@ -50,7 +50,7 @@ namespace polyfem::varform
 		void reset()
 		{
 			n_bases = 0;
-			assembly = nullptr;
+			assembly_essentials = nullptr;
 			bases = nullptr;
 			disc_orders.resize(0);
 			polys.clear();
@@ -69,8 +69,8 @@ namespace polyfem::varform
 		/// Number of globally indexed scalar basis functions in the space.
 		int n_bases = 0;
 
-		/// Per-element basis data.
-		std::shared_ptr<assembler::AssemblyEssentials> assembly;
+		/// SOA data storage for basis, quadrature, and dof mapping.
+		std::shared_ptr<assembler::AssemblyEssentials> assembly_essentials;
 
 		/// Deprecated compatibility view of assembly.
 		mutable std::shared_ptr<std::vector<basis::ElementBases>> bases;
@@ -116,8 +116,9 @@ namespace polyfem::varform
 
 		const std::vector<basis::ElementBases> &basis_list() const
 		{
-			if (!bases && assembly)
-				bases = assembly->legacy_bases_ptr();
+			// In NG assembly pipeline, we get legacy element bases from NG assembly essentials.
+			if (!bases && assembly_essentials)
+				bases = assembly_essentials->legacy_bases_ptr();
 			assert(bases);
 			return *bases;
 		}
@@ -125,8 +126,9 @@ namespace polyfem::varform
 		const std::vector<basis::ElementBases> &geometry_basis_list() const
 		{
 			assert(geometry);
-			if (!geometry->bases && geometry->assembly)
-				geometry->bases = geometry->assembly->legacy_bases_ptr();
+			// In NG assembly pipeline, we get legacy element bases from NG assembly essentials.
+			if (!geometry->bases && geometry->assembly_essentials)
+				geometry->bases = geometry->assembly_essentials->legacy_bases_ptr();
 			assert(geometry->bases);
 			return *geometry->bases;
 		}
@@ -135,7 +137,7 @@ namespace polyfem::varform
 		{
 			value_dim = 1;
 			n_bases = 0;
-			assembly = nullptr;
+			assembly_essentials = nullptr;
 			bases = nullptr;
 			disc_orders.resize(0);
 			disc_ordersq.resize(0);
@@ -153,7 +155,7 @@ namespace polyfem::varform
 	inline void GeometryMapping::init_from_fe_space(const FESpace &space)
 	{
 		n_bases = space.n_bases;
-		assembly = space.assembly;
+		assembly_essentials = space.assembly_essentials;
 		bases = space.bases;
 		disc_orders = space.disc_orders;
 		polys = space.polys;

@@ -95,7 +95,7 @@ namespace polyfem
 		for (int row = 0; row < block_rows; ++row)
 			row_ptr_[row + 1] += row_ptr_[row];
 
-		value_size_ = block_dim_ * block_dim_ * static_cast<int>(col_idx_.size());
+		value_size_ = static_cast<size_t>(block_dim_ * block_dim_) * col_idx_.size();
 	}
 
 	BSRMatrix::BSRMatrix(int rows, int cols)
@@ -157,11 +157,20 @@ namespace polyfem
 		return BSRMatrixMutableView{rows_, cols_, block_dim_, row_ptr_, col_idx_, static_values_};
 	}
 
-	StiffnessMatrix BSRMatrix::to_stiffness_matrix()
+	StiffnessMatrix BSRMatrix::to_stiffness_matrix(ExecutionPolicy policy)
 	{
 		assert(block_dim_ > 0);
 		assert(rows_ % block_dim_ == 0);
 		assert(cols_ % block_dim_ == 0);
+
+#ifdef POLYFEM_WITH_CUDA
+		if (policy.mode == ExecutionMode::Hybrid && has_allocate_device_value())
+		{
+			to_stiffness_matrix_device(policy);
+		}
+#else
+		(void)policy;
+#endif
 
 		int bd = block_dim_;
 		int block_size = bd * bd;
@@ -176,7 +185,7 @@ namespace polyfem
 			for (int p = bsr.row_ptr[br]; p < bsr.row_ptr[br + 1]; ++p)
 			{
 				int bc = bsr.col_idx[p];
-				const double *block = bsr.values.data() + p * block_size;
+				const double *block = bsr.values.data() + static_cast<size_t>(p) * static_cast<size_t>(block_size);
 
 				for (int i = 0; i < bd; ++i)
 				{
@@ -199,17 +208,6 @@ namespace polyfem
 		return out;
 	}
 
-	StiffnessMatrix BSRMatrix::to_stiffness_matrix(ExecutionPolicy policy)
-	{
-#ifdef POLYFEM_WITH_CUDA
-		if (policy.mode == ExecutionMode::Hybrid && has_allocate_device_value())
-			return to_stiffness_matrix_device(policy);
-#else
-		(void)policy;
-#endif
-		return to_stiffness_matrix();
-	}
-
 	void append_sparse_matrix_to_triplets(
 		const StiffnessMatrix &matrix,
 		std::vector<Eigen::Triplet<double>> &triplets,
@@ -219,9 +217,8 @@ namespace polyfem
 		{
 			for (StiffnessMatrix::InnerIterator it(matrix, k); it; ++it)
 			{
-				const double value = scale * it.value();
-				if (value != 0.0)
-					triplets.emplace_back(it.row(), it.col(), value);
+				double value = scale * it.value();
+				triplets.emplace_back(it.row(), it.col(), value);
 			}
 		}
 	}
@@ -238,7 +235,7 @@ namespace polyfem
 		{
 			for (StiffnessMatrix::InnerIterator it(matrix, k); it; ++it)
 			{
-				double *entry = bsr.get_entry(static_cast<int>(it.row()), static_cast<int>(it.col()));
+				double *entry = bsr.get_entry(it.row(), it.col());
 				assert(entry != nullptr);
 				*entry += scale * it.value();
 			}
@@ -246,7 +243,7 @@ namespace polyfem
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	BSRMatrixMutableView BSRMatrix::device_view(ExecutionPolicy policy)
+	BSRMatrixMutableView BSRMatrix::device_static_view(ExecutionPolicy policy)
 	{
 		if (policy.mode != ExecutionMode::Hybrid)
 			throw std::runtime_error("BSRMatrix::device_view requires Hybrid execution.");
@@ -260,13 +257,13 @@ namespace polyfem
 
 			cuda::copy_bytes(*p.stream, row_ptr_, *d_row_ptr_);
 			cuda::copy_bytes(*p.stream, col_idx_, *d_col_idx_);
+			cuda::fill_bytes(*p.stream, *d_values_, 0);
 
 			need_host_device_sync_ = false;
 			p.stream->sync();
 		}
 		return BSRMatrixMutableView{rows_, cols_, block_dim_, *d_row_ptr_, *d_col_idx_, *d_values_};
 	}
-
 #endif
 
 } // namespace polyfem

@@ -35,7 +35,7 @@ namespace polyfem::basis
 
 #ifdef POLYFEM_WITH_CUDA
 	/// Return view on device memory. Lazily sync data.
-	BasisStoreView BasisStore::device_view(ExecutionPolicy policy)
+	BasisStoreView BasisStore::device_view(ExecutionPolicy policy) const
 	{
 		auto &p = policy;
 

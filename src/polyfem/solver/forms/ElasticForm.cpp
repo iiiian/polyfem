@@ -306,20 +306,29 @@ namespace polyfem::solver
 			   && ng_materials_ != nullptr;
 	}
 
-	void ElasticForm::first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv, ExecutionPolicy policy) const
+	void ElasticForm::first_derivative_ng(const Eigen::VectorXd &x, DualVector &gradv, ExecutionPolicy policy) const
 	{
-		if (!can_use_ng_assembly()
-			|| x.size() != n_bases_ * assembler_.size())
+		if (!can_use_ng_assembly())
 		{
+			// Base impl fallbacks to legacy assembly method.
 			Form::first_derivative_ng(x, gradv, policy);
 			return;
 		}
 
 		assembler_.assemble_gradient_ng(
-			is_volume_, n_bases_, *ng_bases_, *ng_geom_bases_, *ng_cache_, *ng_materials_,
+			is_volume_,
+			n_bases_,
+			*ng_bases_,
+			*ng_geom_bases_,
+			*ng_cache_,
+			*ng_materials_,
 			Span<const double>(x.data(), x.size()),
 			Span<const double>(x_prev_.data(), x_prev_.size()),
-			t_, dt_, gradv, weighted_scale(), policy);
+			t_,
+			dt_,
+			gradv,
+			weighted_scale(),
+			policy);
 	}
 
 	std::optional<BSRSparsityPattern> ElasticForm::hessian_sparsity_pattern_ng() const
@@ -332,20 +341,50 @@ namespace polyfem::solver
 
 	void ElasticForm::second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian, ExecutionPolicy policy) const
 	{
-		if (!can_use_ng_assembly()
-			|| x.size() != n_bases_ * assembler_.size()
-			|| hessian.rows() != x.size()
-			|| hessian.cols() != x.size())
+		if (!can_use_ng_assembly())
 		{
+			// Base impl fallbacks to legacy assembly method.
 			Form::second_derivative_ng(x, hessian, policy);
 			return;
 		}
 
 		assembler_.assemble_hessian_ng(
-			is_volume_, n_bases_, *ng_bases_, *ng_geom_bases_, *ng_cache_, *ng_materials_,
+			is_volume_,
+			n_bases_,
+			*ng_bases_,
+			*ng_geom_bases_,
+			*ng_cache_,
+			*ng_materials_,
 			Span<const double>(x.data(), x.size()),
 			Span<const double>(x_prev_.data(), x_prev_.size()),
-			t_, dt_, hessian, project_to_psd_, weighted_scale(), policy);
+			t_,
+			dt_,
+			hessian,
+			project_to_psd_,
+			weighted_scale(),
+			policy);
+	}
+
+	double ElasticForm::value_ng(const Eigen::VectorXd &x, ExecutionPolicy policy) const
+	{
+		if (!can_use_ng_assembly())
+		{
+			// Base impl fallbacks to legacy assembly method.
+			return Form::value_ng(x, policy);
+		}
+
+		double value = assembler_.assemble_energy_ng(
+			is_volume_,
+			*ng_bases_,
+			*ng_geom_bases_,
+			*ng_cache_,
+			*ng_materials_,
+			Span<const double>(x.data(), x.size()),
+			Span<const double>(x_prev_.data(), x_prev_.size()),
+			t_,
+			dt_,
+			policy);
+		return weighted_scale() * value;
 	}
 
 	double ElasticForm::value_unweighted(const Eigen::VectorXd &x) const

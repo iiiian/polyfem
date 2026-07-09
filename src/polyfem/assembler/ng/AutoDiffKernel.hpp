@@ -123,7 +123,7 @@ namespace polyfem::assembler
 		static constexpr int VALUE_DIM = EnergyKernel::VALUE_DIM;
 		static constexpr int DIM = EnergyKernel::DIM;
 
-		POLYFEM_BOTH static void eval_vector(
+		POLYFEM_BOTH static Eigen::Matrix<double, VALUE_DIM, 1> eval_vector(
 			int elem_id,
 			int quad_id,
 			int local_i,
@@ -210,11 +210,7 @@ namespace polyfem::assembler
 
 			AD energy = EnergyKernel::template eval_scalar<AD>(u, gradu, material);
 
-			auto &local_grad = energy.get_grad();
-			for (int k = 0; k < local_grad.size(); ++k)
-			{
-				vector_i[k] = local_grad(k);
-			}
+			return energy.get_grad();
 		}
 	};
 
@@ -225,7 +221,8 @@ namespace polyfem::assembler
 		static constexpr int VALUE_DIM = EnergyKernel::VALUE_DIM;
 		static constexpr int DIM = EnergyKernel::DIM;
 
-		POLYFEM_BOTH static void eval_matrix(
+		using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
+		POLYFEM_BOTH static Mat eval_matrix(
 			int elem_id,
 			int quad_id,
 			int local_i,
@@ -240,7 +237,8 @@ namespace polyfem::assembler
 
 			using Vec1 = Eigen::Vector<double, VALUE_DIM>;
 			using Vec2 = Eigen::Vector<double, DIM>;
-			using Mat = Eigen::Matrix<double, VALUE_DIM, DIM, Eigen::RowMajor>;
+			// gradu := du/dX. So the shape is (value dim x dim).
+			using GradU = Eigen::Matrix<double, VALUE_DIM, DIM, Eigen::RowMajor>;
 
 			constexpr int NEED_UNKNOWN_VALUE = EnergyKernel::NEED_UNKNOWN_VALUE;
 			constexpr int NEED_UNKNOWN_GRAD = EnergyKernel::NEED_UNKNOWN_GRAD;
@@ -249,7 +247,7 @@ namespace polyfem::assembler
 			int basis_num = elem_desc.basis_desc.basis_num;
 
 			Vec1 u_value = Vec1::Zero();
-			Mat gradu_value = Mat::Zero();
+			GradU gradu_value = GradU::Zero();
 			for (int b = 0; b < basis_num; ++b)
 			{
 				if constexpr (NEED_UNKNOWN_VALUE)
@@ -320,17 +318,7 @@ namespace polyfem::assembler
 			}
 
 			AD energy = EnergyKernel::template eval_scalar<AD>(u, gradu, material);
-
-			// Double2<VALUE_DIM> stores the upper-right Hessian block between
-			// the local_i and local_j variable groups seeded below.
-			const auto &local_hess = energy.get_hess();
-			for (int row = 0; row < VALUE_DIM; ++row)
-			{
-				for (int col = 0; col < VALUE_DIM; ++col)
-				{
-					matrix_ij[row * VALUE_DIM + col] = local_hess(row, col);
-				}
-			}
+			return energy.get_hess();
 		}
 	};
 

@@ -10,6 +10,7 @@
 #include <vector>
 #include <unordered_set>
 #include <cstdint>
+#include <cstddef>
 #include <cassert>
 
 #ifdef POLYFEM_WITH_CUDA
@@ -54,7 +55,7 @@ namespace polyfem
 			{
 				if (col_idx[i] == block_j)
 				{
-					return values.data() + block_dim * block_dim * i;
+					return values.data() + static_cast<size_t>(block_dim * block_dim) * static_cast<size_t>(i);
 				}
 			}
 			return nullptr;
@@ -78,7 +79,7 @@ namespace polyfem
 		int rows_;
 		int cols_;
 		int block_dim_;
-		int value_size_;
+		size_t value_size_;
 
 		std::vector<int> row_ptr_;
 		std::vector<int> col_idx_;
@@ -109,8 +110,7 @@ namespace polyfem
 		std::vector<Eigen::Triplet<double>> &dynamic_view() { return dynamic_values_; }
 
 		/// Convert the static BSR and dynamic triplets into an Eigen StiffnessMatrix.
-		StiffnessMatrix to_stiffness_matrix();
-		StiffnessMatrix to_stiffness_matrix(ExecutionPolicy policy);
+		StiffnessMatrix to_stiffness_matrix(ExecutionPolicy policy = {});
 
 		/// Reset host/device static value arrays to zero if they are allocated, and clear dynamic entries.
 		void reset(ExecutionPolicy policy = {});
@@ -122,9 +122,11 @@ namespace polyfem
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Lazily copy topology to device, allocate zero initialized static value array, and return device matrix view.
-		BSRMatrixMutableView device_view(ExecutionPolicy policy);
+		BSRMatrixMutableView device_static_view(ExecutionPolicy policy);
+#endif
 
-		/// Convert to StiffnessMatrix using the device (CUDA) path. Falls back to host path if device values are not allocated.
+	private:
+#ifdef POLYFEM_WITH_CUDA
 		StiffnessMatrix to_stiffness_matrix_device(ExecutionPolicy policy);
 #endif
 	};
@@ -138,4 +140,5 @@ namespace polyfem
 		const StiffnessMatrix &matrix,
 		BSRMatrixMutableView bsr,
 		double scale = 1.0);
+
 } // namespace polyfem

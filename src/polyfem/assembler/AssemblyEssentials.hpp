@@ -55,12 +55,12 @@ namespace polyfem::assembler
 		[[deprecated]] std::vector<LocalNodeFromPrimitiveFunc> legacy_local_nodes_from_primitive;
 
 #ifdef POLYFEM_WITH_CUDA
-		bool need_host_device_sync_ = true;
+		mutable bool need_host_device_sync_ = true;
 #endif
 
 	private:
 #ifdef POLYFEM_WITH_CUDA
-		DeviceBuf<ElementDesc> d_element_desc_;
+		mutable DeviceBuf<ElementDesc> d_element_desc_;
 #endif
 		mutable std::shared_ptr<std::vector<basis::ElementBases>> legacy_bases_;
 
@@ -90,7 +90,7 @@ namespace polyfem::assembler
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.
-		AssemblyEssentialsView device_view(ExecutionPolicy policy);
+		AssemblyEssentialsView device_view(ExecutionPolicy policy) const;
 
 		/// Release device storage.
 		void clear_device_storage();

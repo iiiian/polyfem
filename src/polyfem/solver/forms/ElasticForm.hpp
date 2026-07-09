@@ -54,7 +54,8 @@ namespace polyfem::solver
 			const assembler::AssemblyCache *cache,
 			const material::MaterialExprRegistry *materials);
 
-		void first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv, ExecutionPolicy policy) const override;
+		double value_ng(const Eigen::VectorXd &x, ExecutionPolicy policy) const override;
+		void first_derivative_ng(const Eigen::VectorXd &x, DualVector &gradv, ExecutionPolicy policy) const override;
 		std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng() const override;
 		void second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian, ExecutionPolicy policy) const override;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <polyfem/utils/BlockCSRMatrix.hpp>
+#include <polyfem/utils/DualVector.hpp>
 #include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/Types.hpp>
 #include <polysolve/nonlinear/PostStepData.hpp>
@@ -31,6 +32,12 @@ namespace polyfem::solver
 			return (weight() / scale_) * value_unweighted(x);
 		}
 
+		virtual double value_ng(const Eigen::VectorXd &x, ExecutionPolicy policy) const
+		{
+			(void)policy;
+			return value(x);
+		}
+
 		/// @brief Compute the value of the form multiplied with the weigth
 		/// @param x Current solution
 		/// @return Computed value
@@ -58,14 +65,15 @@ namespace polyfem::solver
 			hessian *= weight() / scale_;
 		}
 
-		virtual void first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv, ExecutionPolicy policy) const
+		virtual void first_derivative_ng(const Eigen::VectorXd &x, DualVector &gradv, ExecutionPolicy policy) const
 		{
 			(void)policy;
 			Eigen::VectorXd tmp;
 			first_derivative(x, tmp);
 			assert(tmp.size() == gradv.size());
+			Span<double> grad_host = gradv.host_view();
 			for (int i = 0; i < tmp.size(); ++i)
-				gradv[i] += tmp[i];
+				grad_host[i] += tmp[i];
 		}
 
 		virtual std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng() const

@@ -36,7 +36,7 @@ namespace polyfem::solver
 		{
 			for (StiffnessMatrix::InnerIterator it(mass_, k); it; ++it)
 			{
-				pattern.insert(uint32_t(it.row()), uint32_t(it.col()));
+				pattern.insert(it.row(), it.col());
 			}
 		}
 

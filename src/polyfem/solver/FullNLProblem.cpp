@@ -117,20 +117,20 @@ namespace polyfem::solver
 		double val = 0;
 		for (auto &f : forms_)
 			if (f->enabled())
-				val += f->value(x);
+				val += f->value_ng(x, execution_policy_);
 		return val;
 	}
 
 	void FullNLProblem::gradient(const TVector &x, TVector &grad)
 	{
-		grad = TVector::Zero(x.size());
-		Span<double> grad_span(grad.data(), grad.size());
+		DualVector grad_dual(x.size());
 		for (auto &f : forms_)
 		{
 			if (!f->enabled())
 				continue;
-			f->first_derivative_ng(x, grad_span, execution_policy_);
+			f->first_derivative_ng(x, grad_dual, execution_policy_);
 		}
+		grad = grad_dual.to_eigen(execution_policy_);
 	}
 
 	void FullNLProblem::hessian(const TVector &x, THessian &hessian)

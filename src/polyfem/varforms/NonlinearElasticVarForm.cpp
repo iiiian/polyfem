@@ -641,8 +641,8 @@ namespace polyfem::varform
 			// Rayleigh damping form
 			args["solver"]["rayleigh_damping"],
 			// Optional NG elastic assembly sources
-			space_.assembly.get(),
-			space_.geometry ? space_.geometry->assembly.get() : nullptr,
+			space_.assembly_essentials.get(),
+			space_.geometry->assembly_essentials.get(),
 			&ng_ass_cache_,
 			material_expr_registry_ ? &*material_expr_registry_ : nullptr);
 

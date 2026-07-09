@@ -22,11 +22,38 @@ namespace polyfem::assembler
 		Eigen::VectorXd assemble_gradient(const NonLinearAssemblerData &data) const override;
 		Eigen::MatrixXd assemble_hessian(const NonLinearAssemblerData &data) const override;
 
-		bool has_ng_assembly_support() const override { return size() == 2 || size() == 3; }
+		bool has_ng_assembly_support() const override { return true; }
+
+		double assemble_energy_ng(
+			bool is_volume,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			double t,
+			double dt,
+			ExecutionPolicy policy) const override;
+
+		void assemble_energy_per_element_ng(
+			bool is_volume,
+			const AssemblyEssentials &bases,
+			const AssemblyEssentials &geom_bases,
+			const AssemblyCache &cache,
+			const material::MaterialExprRegistry &materials,
+			Span<const double> x,
+			Span<const double> x_prev,
+			double t,
+			double dt,
+			DualVector &energy,
+			ExecutionPolicy policy) const override;
+
 		std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng(
 			bool is_volume,
 			int n_basis,
 			const AssemblyEssentials &bases) const override;
+
 		void assemble_gradient_ng(
 			bool is_volume,
 			int n_basis,
@@ -38,9 +65,10 @@ namespace polyfem::assembler
 			Span<const double> x_prev,
 			double t,
 			double dt,
-			Span<double> grad,
+			DualVector &grad,
 			double scale,
 			ExecutionPolicy policy) const override;
+
 		void assemble_hessian_ng(
 			bool is_volume,
 			int n_basis,

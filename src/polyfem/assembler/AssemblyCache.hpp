@@ -335,22 +335,22 @@ namespace polyfem::assembler
 		std::vector<double> weighted_measure_;
 
 #ifdef POLYFEM_WITH_CUDA
-		bool need_host_device_sync_ = true;
+		mutable bool need_host_device_sync_ = true;
 
-		DeviceBuf<AssemblyCacheDesc> d_desc_;
-		DeviceBuf<double> d_basis_values_;
-		DeviceBuf<double> d_basis_grad_x_;
-		DeviceBuf<double> d_basis_grad_y_;
-		DeviceBuf<double> d_basis_grad_z_;
-		DeviceBuf<double> d_basis_grad_phy_x_;
-		DeviceBuf<double> d_basis_grad_phy_y_;
-		DeviceBuf<double> d_basis_grad_phy_z_;
-		DeviceBuf<double> d_physical_x_;
-		DeviceBuf<double> d_physical_y_;
-		DeviceBuf<double> d_physical_z_;
-		DeviceBuf<double> d_det_J_;
-		DeviceBuf<double> d_J_inverse_transpose_;
-		DeviceBuf<double> d_weighted_measure_;
+		mutable DeviceBuf<AssemblyCacheDesc> d_desc_;
+		mutable DeviceBuf<double> d_basis_values_;
+		mutable DeviceBuf<double> d_basis_grad_x_;
+		mutable DeviceBuf<double> d_basis_grad_y_;
+		mutable DeviceBuf<double> d_basis_grad_z_;
+		mutable DeviceBuf<double> d_basis_grad_phy_x_;
+		mutable DeviceBuf<double> d_basis_grad_phy_y_;
+		mutable DeviceBuf<double> d_basis_grad_phy_z_;
+		mutable DeviceBuf<double> d_physical_x_;
+		mutable DeviceBuf<double> d_physical_y_;
+		mutable DeviceBuf<double> d_physical_z_;
+		mutable DeviceBuf<double> d_det_J_;
+		mutable DeviceBuf<double> d_J_inverse_transpose_;
+		mutable DeviceBuf<double> d_weighted_measure_;
 #endif
 
 		AssemblyCacheDesc insert(bool is_mass, const AssemblyTempStorage &temp);
@@ -364,7 +364,7 @@ namespace polyfem::assembler
 		AssemblyCacheView view() const;
 
 #ifdef POLYFEM_WITH_CUDA
-		AssemblyCacheView device_view(ExecutionPolicy policy);
+		AssemblyCacheView device_view(ExecutionPolicy policy) const;
 		void clear_device_storage();
 #endif
 	};

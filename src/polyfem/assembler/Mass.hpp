@@ -32,7 +32,7 @@ namespace polyfem::assembler
 
 		virtual std::map<std::string, ParamFunc> parameters() const override;
 
-		bool has_ng_assembly_support() const override { return size() >= 1 && size() <= 3; }
+		bool has_ng_assembly_support() const override { return true; }
 
 		std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng(
 			bool is_volume,

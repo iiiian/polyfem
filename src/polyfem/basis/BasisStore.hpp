@@ -90,7 +90,7 @@ namespace polyfem::basis
 		std::vector<BasisEvalCallback> eval_callbacks_;
 
 #ifdef POLYFEM_WITH_CUDA
-		DeviceBuf<double> d_rational_weights_;
+		mutable DeviceBuf<double> d_rational_weights_;
 		// BasisEvalCallback can not be used on device.
 #endif
 
@@ -100,10 +100,10 @@ namespace polyfem::basis
 		BasisStoreView view() const;
 
 #ifdef POLYFEM_WITH_CUDA
-		bool need_host_device_sync_ = true;
+		mutable bool need_host_device_sync_ = true;
 
 		/// Return view on device memory. Lazily sync data.
-		BasisStoreView device_view(ExecutionPolicy policy);
+		BasisStoreView device_view(ExecutionPolicy policy) const;
 
 		/// Release device storage.
 		void clear_device_storage();

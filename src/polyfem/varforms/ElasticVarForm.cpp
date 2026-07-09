@@ -1,5 +1,6 @@
 #include "ElasticVarForm.hpp"
 
+#include <polyfem/assembler/ComputeAssemblyCache.hpp>
 #include <polyfem/assembler/ElementAssemblyValues.hpp>
 
 #include <polyfem/assembler/MultiModel.hpp>
@@ -237,6 +238,16 @@ namespace polyfem::varform
 			mass_ass_vals_cache_.init_empty(true);
 			pure_mass_ass_vals_cache_.init_empty(true);
 		}
+
+		// If hybrid assembly is enabled and NG assembly essential data is populated,
+		// compute NG assembly cache.
+		if (execution_policy_.mode == ExecutionMode::Hybrid && space_.assembly_essentials && space_.geometry->assembly_essentials)
+		{
+			ng_ass_cache_ = assembler::compute_assembly_cache_batched(
+				space_.assembly_essentials->view(),
+				space_.geometry->assembly_essentials->view(),
+				false);
+		}
 	}
 
 	void ElasticVarForm::build_rhs_assembler()
@@ -303,30 +314,36 @@ namespace polyfem::varform
 		timer.start();
 		logger().info("Assembling mass mat...");
 
-		const assembler::AssemblyEssentials *geom_assembly =
-			space_.geometry && space_.geometry->assembly ? space_.geometry->assembly.get() : space_.assembly.get();
-
+		// If all data for NG assembly pipeline is available, use NG assembly.
 		bool assembled_mass_ng = false;
-		if (mass_assembler_->has_ng_assembly_support()
-			&& space_.assembly
-			&& geom_assembly != nullptr
+		if (space_.assembly_essentials
+			&& space_.geometry->assembly_essentials
 			&& material_expr_registry_)
 		{
 			std::optional<BSRSparsityPattern> pattern =
-				mass_assembler_->hessian_sparsity_pattern_ng(mesh.is_volume(), space_.n_bases, *space_.assembly);
-			if (pattern)
-			{
-				BSRMatrix mass_bsr(*pattern);
-				assembler::AssemblyCache mass_cache;
-				mass_assembler_->assemble_hessian_ng(
-					mesh.is_volume(), space_.n_bases, *space_.assembly, *geom_assembly, mass_cache, *material_expr_registry_,
-					Span<const double>{},
-					Span<const double>{},
-					/*t=*/0, /*dt=*/0, mass_bsr, /*project_to_psd=*/false, /*scale=*/1,
-					execution_policy_);
-				mass_ = mass_bsr.to_stiffness_matrix(execution_policy_);
-				assembled_mass_ng = true;
-			}
+				mass_assembler_->hessian_sparsity_pattern_ng(mesh.is_volume(), space_.n_bases, *space_.assembly_essentials);
+			assert(pattern);
+
+			BSRMatrix mass_bsr(*pattern);
+			assembler::AssemblyCache mass_cache;
+			mass_assembler_->assemble_hessian_ng(
+				mesh.is_volume(),
+				space_.n_bases,
+				*space_.assembly_essentials,
+				*space_.geometry->assembly_essentials,
+				mass_cache,
+				*material_expr_registry_,
+				{}, // x
+				{}, // x_prev
+				0,  // t
+				0,  // dt
+				mass_bsr,
+				false, // project to psd
+				1.0,   // extra scaling.
+				{}     // execution policy. Force cpu assembly as GPU is overkill.
+			);
+			mass_ = mass_bsr.to_stiffness_matrix(execution_policy_);
+			assembled_mass_ng = true;
 		}
 
 		if (!assembled_mass_ng)

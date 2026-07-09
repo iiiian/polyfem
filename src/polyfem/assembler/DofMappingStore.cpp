@@ -64,7 +64,7 @@ namespace polyfem::assembler
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	DofMappingStoreView DofMappingStore::device_view(ExecutionPolicy policy)
+	DofMappingStoreView DofMappingStore::device_view(ExecutionPolicy policy) const
 	{
 
 		auto &p = policy;
