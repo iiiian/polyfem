@@ -130,11 +130,8 @@ namespace polyfem::assembler
 			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
-			Span<const double> unknown,
-			Span<double> vector_i)
+			Span<const double> unknown)
 		{
-			assert(vector_i.size() == VALUE_DIM);
-
 			using Vec1 = Eigen::Vector<double, VALUE_DIM>;
 			using Vec2 = Eigen::Vector<double, DIM>;
 			using Mat = Eigen::Matrix<double, VALUE_DIM, DIM, Eigen::RowMajor>;
@@ -230,11 +227,8 @@ namespace polyfem::assembler
 			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
-			Span<const double> unknown,
-			Span<double> matrix_ij)
+			Span<const double> unknown)
 		{
-			assert(matrix_ij.size() == VALUE_DIM * VALUE_DIM);
-
 			using Vec1 = Eigen::Vector<double, VALUE_DIM>;
 			using Vec2 = Eigen::Vector<double, DIM>;
 			// gradu := du/dX. So the shape is (value dim x dim).

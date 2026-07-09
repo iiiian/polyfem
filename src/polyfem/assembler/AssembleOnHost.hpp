@@ -121,8 +121,8 @@ namespace polyfem::assembler
 				int quad_num = elem_cache.quad_num();
 				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 				{
-					Material material = detail::eval_material<Material, DIM>(material_registry, cache, elem_id, quad_id, time);
-					double val = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
+					Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
+					double val = ScalarKernel::eval_scalar(elem_id, quad_id, bases_view, elem_cache, material, unknown);
 					local_scalar += val * elem_cache.get_weighted_measure(quad_id);
 				}
 			}
@@ -176,8 +176,8 @@ namespace polyfem::assembler
 				double local_scalar = 0.0;
 				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 				{
-					Material material = detail::eval_material<Material, DIM>(material_registry, cache, elem_id, quad_id, time);
-					double val = ScalarKernel::eval_scalar(elem_id, quad_id, bases, cache, material, unknown);
+					Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
+					double val = ScalarKernel::eval_scalar(elem_id, quad_id, bases_view, elem_cache, material, unknown);
 					local_scalar += val * elem_cache.get_weighted_measure(quad_id);
 				}
 				scalar_out[elem_id] += local_scalar;
@@ -236,13 +236,13 @@ namespace polyfem::assembler
 					Vec vec_i = Vec::Zero();
 					for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 					{
-						Material material = detail::eval_material<Material, DIM>(material_registry, cache, elem_id, quad_id, time);
+						Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
 						Vec kernel_out = VectorKernel::eval_vector(
 							elem_id,
 							quad_id,
 							basis_id,
-							bases,
-							cache,
+							bases_view,
+							elem_cache,
 							material,
 							unknown);
 						vec_i += kernel_out * extra_scaling * elem_cache.get_weighted_measure(quad_id);
@@ -334,14 +334,14 @@ namespace polyfem::assembler
 						int quad_num = elem_cache.quad_num();
 						for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 						{
-							Material material = detail::eval_material<Material, DIM>(material_registry, cache, elem_id, quad_id, time);
+							Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
 							Mat kernel_out = MatrixKernel::eval_matrix(
 								elem_id,
 								quad_id,
 								bi,
 								bj,
-								bases,
-								cache,
+								bases_view,
+								elem_cache,
 								material,
 								unknown);
 							mat_ij += kernel_out * extra_scaling * elem_cache.get_weighted_measure(quad_id);
