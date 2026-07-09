@@ -135,44 +135,44 @@ namespace polyfem::assembler
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	AssemblyCacheView AssemblyCache::device_view(CudaExecutionPolicy policy)
+	AssemblyCacheView AssemblyCache::device_view(ExecutionPolicy policy)
 	{
 		auto &p = policy;
 		if (need_host_device_sync_)
 		{
-			d_desc_ = cuda::make_buffer<AssemblyCacheDesc>(p.stream, p.mr, desc_.size(), cuda::no_init);
-			d_basis_values_ = cuda::make_buffer<double>(p.stream, p.mr, basis_values_.size(), cuda::no_init);
-			d_basis_grad_x_ = cuda::make_buffer<double>(p.stream, p.mr, basis_grad_x_.size(), cuda::no_init);
-			d_basis_grad_y_ = cuda::make_buffer<double>(p.stream, p.mr, basis_grad_y_.size(), cuda::no_init);
-			d_basis_grad_z_ = cuda::make_buffer<double>(p.stream, p.mr, basis_grad_z_.size(), cuda::no_init);
-			d_basis_grad_phy_x_ = cuda::make_buffer<double>(p.stream, p.mr, basis_grad_phy_x_.size(), cuda::no_init);
-			d_basis_grad_phy_y_ = cuda::make_buffer<double>(p.stream, p.mr, basis_grad_phy_y_.size(), cuda::no_init);
-			d_basis_grad_phy_z_ = cuda::make_buffer<double>(p.stream, p.mr, basis_grad_phy_z_.size(), cuda::no_init);
-			d_physical_x_ = cuda::make_buffer<double>(p.stream, p.mr, physical_x_.size(), cuda::no_init);
-			d_physical_y_ = cuda::make_buffer<double>(p.stream, p.mr, physical_y_.size(), cuda::no_init);
-			d_physical_z_ = cuda::make_buffer<double>(p.stream, p.mr, physical_z_.size(), cuda::no_init);
-			d_det_J_ = cuda::make_buffer<double>(p.stream, p.mr, det_J_.size(), cuda::no_init);
-			d_J_inverse_transpose_ = cuda::make_buffer<double>(p.stream, p.mr, J_inverse_transpose_.size(), cuda::no_init);
-			d_weighted_measure_ = cuda::make_buffer<double>(p.stream, p.mr, weighted_measure_.size(), cuda::no_init);
+			d_desc_ = cuda::make_buffer<AssemblyCacheDesc>(*p.stream, *p.mr, desc_.size(), cuda::no_init);
+			d_basis_values_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_values_.size(), cuda::no_init);
+			d_basis_grad_x_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_grad_x_.size(), cuda::no_init);
+			d_basis_grad_y_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_grad_y_.size(), cuda::no_init);
+			d_basis_grad_z_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_grad_z_.size(), cuda::no_init);
+			d_basis_grad_phy_x_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_grad_phy_x_.size(), cuda::no_init);
+			d_basis_grad_phy_y_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_grad_phy_y_.size(), cuda::no_init);
+			d_basis_grad_phy_z_ = cuda::make_buffer<double>(*p.stream, *p.mr, basis_grad_phy_z_.size(), cuda::no_init);
+			d_physical_x_ = cuda::make_buffer<double>(*p.stream, *p.mr, physical_x_.size(), cuda::no_init);
+			d_physical_y_ = cuda::make_buffer<double>(*p.stream, *p.mr, physical_y_.size(), cuda::no_init);
+			d_physical_z_ = cuda::make_buffer<double>(*p.stream, *p.mr, physical_z_.size(), cuda::no_init);
+			d_det_J_ = cuda::make_buffer<double>(*p.stream, *p.mr, det_J_.size(), cuda::no_init);
+			d_J_inverse_transpose_ = cuda::make_buffer<double>(*p.stream, *p.mr, J_inverse_transpose_.size(), cuda::no_init);
+			d_weighted_measure_ = cuda::make_buffer<double>(*p.stream, *p.mr, weighted_measure_.size(), cuda::no_init);
 
-			cuda::copy_bytes(p.stream, desc_, *d_desc_);
-			cuda::copy_bytes(p.stream, basis_values_, *d_basis_values_);
-			cuda::copy_bytes(p.stream, basis_grad_x_, *d_basis_grad_x_);
-			cuda::copy_bytes(p.stream, basis_grad_y_, *d_basis_grad_y_);
-			cuda::copy_bytes(p.stream, basis_grad_z_, *d_basis_grad_z_);
-			cuda::copy_bytes(p.stream, basis_grad_phy_x_, *d_basis_grad_phy_x_);
-			cuda::copy_bytes(p.stream, basis_grad_phy_y_, *d_basis_grad_phy_y_);
-			cuda::copy_bytes(p.stream, basis_grad_phy_z_, *d_basis_grad_phy_z_);
-			cuda::copy_bytes(p.stream, physical_x_, *d_physical_x_);
-			cuda::copy_bytes(p.stream, physical_y_, *d_physical_y_);
-			cuda::copy_bytes(p.stream, physical_z_, *d_physical_z_);
-			cuda::copy_bytes(p.stream, det_J_, *d_det_J_);
-			cuda::copy_bytes(p.stream, J_inverse_transpose_, *d_J_inverse_transpose_);
-			cuda::copy_bytes(p.stream, weighted_measure_, *d_weighted_measure_);
+			cuda::copy_bytes(*p.stream, desc_, *d_desc_);
+			cuda::copy_bytes(*p.stream, basis_values_, *d_basis_values_);
+			cuda::copy_bytes(*p.stream, basis_grad_x_, *d_basis_grad_x_);
+			cuda::copy_bytes(*p.stream, basis_grad_y_, *d_basis_grad_y_);
+			cuda::copy_bytes(*p.stream, basis_grad_z_, *d_basis_grad_z_);
+			cuda::copy_bytes(*p.stream, basis_grad_phy_x_, *d_basis_grad_phy_x_);
+			cuda::copy_bytes(*p.stream, basis_grad_phy_y_, *d_basis_grad_phy_y_);
+			cuda::copy_bytes(*p.stream, basis_grad_phy_z_, *d_basis_grad_phy_z_);
+			cuda::copy_bytes(*p.stream, physical_x_, *d_physical_x_);
+			cuda::copy_bytes(*p.stream, physical_y_, *d_physical_y_);
+			cuda::copy_bytes(*p.stream, physical_z_, *d_physical_z_);
+			cuda::copy_bytes(*p.stream, det_J_, *d_det_J_);
+			cuda::copy_bytes(*p.stream, J_inverse_transpose_, *d_J_inverse_transpose_);
+			cuda::copy_bytes(*p.stream, weighted_measure_, *d_weighted_measure_);
 
 			need_host_device_sync_ = false;
 
-			p.stream.sync();
+			p.stream->sync();
 		}
 		return AssemblyCacheView{
 			*d_desc_,

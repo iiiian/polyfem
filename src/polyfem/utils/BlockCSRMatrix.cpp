@@ -9,6 +9,7 @@
 #include <cassert>
 #include <utility>
 #include <algorithm>
+#include <stdexcept>
 
 #ifdef POLYFEM_WITH_CUDA
 #include <cuda/algorithm>
@@ -132,7 +133,7 @@ namespace polyfem
 #endif
 	}
 
-	void BSRMatrix::reset()
+	void BSRMatrix::reset(ExecutionPolicy policy)
 	{
 		std::fill(static_values_.begin(), static_values_.end(), 0.0);
 		dynamic_values_.clear();
@@ -140,10 +141,12 @@ namespace polyfem
 #ifdef POLYFEM_WITH_CUDA
 		if (d_values_)
 		{
-			CudaExecutionPolicy policy;
-			cuda::fill_bytes(policy.stream, *d_values_, 0);
-			policy.stream.sync();
+			assert(policy.stream);
+			cuda::fill_bytes(*policy.stream, *d_values_, 0);
+			policy.stream->sync();
 		}
+#else
+		(void)policy;
 #endif
 	}
 
@@ -196,6 +199,17 @@ namespace polyfem
 		return out;
 	}
 
+	StiffnessMatrix BSRMatrix::to_stiffness_matrix(ExecutionPolicy policy)
+	{
+#ifdef POLYFEM_WITH_CUDA
+		if (policy.mode == ExecutionMode::Hybrid && has_allocate_device_value())
+			return to_stiffness_matrix_device(policy);
+#else
+		(void)policy;
+#endif
+		return to_stiffness_matrix();
+	}
+
 	void append_sparse_matrix_to_triplets(
 		const StiffnessMatrix &matrix,
 		std::vector<Eigen::Triplet<double>> &triplets,
@@ -232,20 +246,23 @@ namespace polyfem
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	BSRMatrixMutableView BSRMatrix::device_view(CudaExecutionPolicy policy)
+	BSRMatrixMutableView BSRMatrix::device_view(ExecutionPolicy policy)
 	{
+		if (policy.mode != ExecutionMode::Hybrid)
+			throw std::runtime_error("BSRMatrix::device_view requires Hybrid execution.");
+
 		auto &p = policy;
 		if (need_host_device_sync_)
 		{
-			d_row_ptr_ = cuda::make_buffer<int>(p.stream, p.mr, row_ptr_.size(), cuda::no_init);
-			d_col_idx_ = cuda::make_buffer<int>(p.stream, p.mr, col_idx_.size(), cuda::no_init);
-			d_values_ = cuda::make_buffer<double>(p.stream, p.mr, value_size_, cuda::no_init);
+			d_row_ptr_ = cuda::make_buffer<int>(*p.stream, *p.mr, row_ptr_.size(), cuda::no_init);
+			d_col_idx_ = cuda::make_buffer<int>(*p.stream, *p.mr, col_idx_.size(), cuda::no_init);
+			d_values_ = cuda::make_buffer<double>(*p.stream, *p.mr, value_size_, cuda::no_init);
 
-			cuda::copy_bytes(p.stream, row_ptr_, *d_row_ptr_);
-			cuda::copy_bytes(p.stream, col_idx_, *d_col_idx_);
+			cuda::copy_bytes(*p.stream, row_ptr_, *d_row_ptr_);
+			cuda::copy_bytes(*p.stream, col_idx_, *d_col_idx_);
 
 			need_host_device_sync_ = false;
-			p.stream.sync();
+			p.stream->sync();
 		}
 		return BSRMatrixMutableView{rows_, cols_, block_dim_, *d_row_ptr_, *d_col_idx_, *d_values_};
 	}

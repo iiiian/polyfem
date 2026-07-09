@@ -7,7 +7,7 @@
 #include <vector>
 
 #ifdef POLYFEM_WITH_CUDA
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
 #include <polyfem/utils/CudaBoth.hpp>
 #endif
@@ -70,7 +70,7 @@ namespace polyfem::assembler
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.
-		DofMappingStoreView device_view(CudaExecutionPolicy policy = {});
+		DofMappingStoreView device_view(ExecutionPolicy policy);
 
 		/// Release device storage.
 		void clear_device_storage();

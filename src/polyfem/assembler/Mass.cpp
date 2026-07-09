@@ -34,7 +34,7 @@ namespace polyfem::assembler
 				const ElementAssemblyCacheView &cache,
 				const Material &material,
 				Span<const double> unknown,
-				Span<double> local_matrix)
+				Span<double> local_matrix) // Hij
 			{
 				(void)element_id;
 				(void)quad_id;
@@ -94,8 +94,10 @@ namespace polyfem::assembler
 		const double dt,
 		BSRMatrix &hessian,
 		const bool project_to_psd,
-		const double scale) const
+		const double scale,
+		ExecutionPolicy policy) const
 	{
+		(void)policy;
 		(void)n_basis;
 		(void)x;
 		(void)x_prev;

@@ -2,6 +2,7 @@
 
 #include <polyfem/utils/Span.hpp>
 #include <polyfem/utils/CudaBoth.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/Types.hpp>
 
 #include <Eigen/SparseCore>
@@ -12,7 +13,6 @@
 #include <cassert>
 
 #ifdef POLYFEM_WITH_CUDA
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
 #endif
 
@@ -110,9 +110,10 @@ namespace polyfem
 
 		/// Convert the static BSR and dynamic triplets into an Eigen StiffnessMatrix.
 		StiffnessMatrix to_stiffness_matrix();
+		StiffnessMatrix to_stiffness_matrix(ExecutionPolicy policy);
 
 		/// Reset host/device static value arrays to zero if they are allocated, and clear dynamic entries.
-		void reset();
+		void reset(ExecutionPolicy policy = {});
 		bool has_allocate_host_value() const;
 		bool has_allocate_device_value() const;
 
@@ -121,10 +122,10 @@ namespace polyfem
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Lazily copy topology to device, allocate zero initialized static value array, and return device matrix view.
-		BSRMatrixMutableView device_view(CudaExecutionPolicy policy = {});
+		BSRMatrixMutableView device_view(ExecutionPolicy policy);
 
 		/// Convert to StiffnessMatrix using the device (CUDA) path. Falls back to host path if device values are not allocated.
-		StiffnessMatrix to_stiffness_matrix_device(CudaExecutionPolicy policy = {});
+		StiffnessMatrix to_stiffness_matrix_device(ExecutionPolicy policy);
 #endif
 	};
 

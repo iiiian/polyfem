@@ -91,7 +91,6 @@ if(POLYFEM_WITH_CUDA)
 	set_source_files_properties(${AUTOGEN_CUDA_BASES} PROPERTIES LANGUAGE CUDA)
 	set_target_properties(polyfem_autogen PROPERTIES
 		CUDA_SEPARABLE_COMPILATION ON
-		CUDA_RESOLVE_DEVICE_SYMBOLS ON
 	)
 	target_compile_definitions(polyfem_autogen PUBLIC POLYFEM_WITH_CUDA)
 	target_compile_features(polyfem_autogen PRIVATE cuda_std_17)

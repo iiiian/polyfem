@@ -58,8 +58,9 @@ namespace polyfem::solver
 			hessian *= weight() / scale_;
 		}
 
-		virtual void first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv) const
+		virtual void first_derivative_ng(const Eigen::VectorXd &x, Span<double> gradv, ExecutionPolicy policy) const
 		{
+			(void)policy;
 			Eigen::VectorXd tmp;
 			first_derivative(x, tmp);
 			assert(tmp.size() == gradv.size());
@@ -72,8 +73,9 @@ namespace polyfem::solver
 			return std::nullopt;
 		}
 
-		virtual void second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian) const
+		virtual void second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian, ExecutionPolicy policy) const
 		{
+			(void)policy;
 			StiffnessMatrix tmp;
 			second_derivative(x, tmp);
 			assert(tmp.rows() == hessian.rows());

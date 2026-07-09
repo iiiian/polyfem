@@ -9,7 +9,7 @@
 #include <vector>
 
 #ifdef POLYFEM_WITH_CUDA
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
 #endif
 
@@ -79,7 +79,7 @@ namespace polyfem::quadrature
 
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.
-		QuadratureStoreView device_view(CudaExecutionPolicy policy = {});
+		QuadratureStoreView device_view(ExecutionPolicy policy);
 
 		/// Release device storage.
 		void clear_device_storage();

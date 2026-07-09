@@ -2,6 +2,7 @@
 
 #include <polyfem/Common.hpp>
 #include <polyfem/utils/Types.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 
 #include <Eigen/Dense>
 
@@ -25,6 +26,7 @@ namespace polyfem::varform
 
 namespace polyfem
 {
+
 	/// VarForm-only simulation state.
 	class State
 	{
@@ -42,6 +44,9 @@ namespace polyfem
 
 		/// main input arguments containing all defaults
 		json args;
+
+		/// execution runtime owning optional device resources
+		std::shared_ptr<ExecutionRuntime> execution_runtime;
 
 		/// active variational formulation
 		std::shared_ptr<varform::VarForm> variational_formulation;

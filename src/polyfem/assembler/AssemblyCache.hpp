@@ -8,7 +8,7 @@
 #include <vector>
 
 #ifdef POLYFEM_WITH_CUDA
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
 #endif
 
@@ -364,7 +364,7 @@ namespace polyfem::assembler
 		AssemblyCacheView view() const;
 
 #ifdef POLYFEM_WITH_CUDA
-		AssemblyCacheView device_view(CudaExecutionPolicy policy = {});
+		AssemblyCacheView device_view(ExecutionPolicy policy);
 		void clear_device_storage();
 #endif
 	};

@@ -44,12 +44,12 @@ namespace polyfem::varform
 	using namespace solver;
 	using namespace time_integrator;
 
-	void NonlinearElasticVarForm::init(const std::string &formulation, const Units &units, const json &args, const std::string &out_path)
+	void NonlinearElasticVarForm::init(const std::string &formulation, const Units &units, const json &args, const std::string &out_path, ExecutionPolicy policy)
 	{
 		json clean_args = args;
 		const bool contact_dhat_was_explicit = clean_args["contact"].value("_dhat_was_explicit", false);
 		clean_args["contact"].erase("_dhat_was_explicit");
-		ElasticVarForm::init(formulation, units, clean_args, out_path);
+		ElasticVarForm::init(formulation, units, clean_args, out_path, policy);
 		contact_dhat_was_explicit_ = contact_dhat_was_explicit;
 	}
 
@@ -747,7 +747,8 @@ namespace polyfem::varform
 		solve_data.nl_problem = std::make_shared<solver::NLProblem>(
 			ndof, nullptr, t, forms, solve_data.al_form,
 			polysolve::linear::Solver::create(args["solver"]["linear"], logger()),
-			characteristic_length, characteristic_force_density, pure_mass_, mesh_->dimension());
+			characteristic_length, characteristic_force_density, pure_mass_, mesh_->dimension(),
+			execution_policy_);
 		solve_data.nl_problem->init(sol);
 		solve_data.nl_problem->update_quantities(t, sol);
 		// --------------------------------------------------------------------

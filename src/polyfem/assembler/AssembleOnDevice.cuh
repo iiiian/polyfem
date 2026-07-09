@@ -3,7 +3,7 @@
 #include <polyfem/materials/MaterialExprRegistry.hpp>
 #include <polyfem/assembler/AssemblyCache.hpp>
 #include <polyfem/assembler/AssemblyEssentials.hpp>
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/MaybeParallelFor.hpp>
 #include <polyfem/utils/BlockCSRMatrix.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
@@ -352,7 +352,7 @@ namespace polyfem::assembler
 			const AssemblyEssentials &bases,
 			const AssemblyCache &cache,
 			const material::MaterialExprRegistry &material_registry,
-			CudaExecutionPolicy policy)
+			ExecutionPolicy policy)
 		{
 			auto cache_view = cache.view();
 
@@ -382,9 +382,9 @@ namespace polyfem::assembler
 				}
 			});
 			auto d_materials =
-				cuda::make_buffer<Material>(policy.stream, policy.mr, global_material_num, cuda::no_init);
-			cuda::copy_bytes(policy.stream, materials, d_materials);
-			policy.stream.sync();
+				cuda::make_buffer<Material>(*policy.stream, *policy.mr, global_material_num, cuda::no_init);
+			cuda::copy_bytes(*policy.stream, materials, d_materials);
+			policy.stream->sync();
 			return d_materials;
 		}
 	} // namespace detail
@@ -395,7 +395,7 @@ namespace polyfem::assembler
 		AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
-		CudaExecutionPolicy policy = {})
+		ExecutionPolicy policy)
 	{
 		auto &p = policy;
 
@@ -413,13 +413,13 @@ namespace polyfem::assembler
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
-		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(p.stream, unknown, d_unknown);
-		auto d_scalar_out = cuda::make_buffer<double>(p.stream, p.mr, 1, 0.0);
+		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
+		cuda::copy_bytes(*p.stream, unknown, d_unknown);
+		auto d_scalar_out = cuda::make_buffer<double>(*p.stream, *p.mr, 1, 0.0);
 
 		int elem_num = bases.element_desc.size();
 		int grid_num = div_round_up(elem_num, 128);
-		detail::assemble_scalar_kernel<ScalarKernel, 128><<<grid_num, 128, 0, p.stream.get()>>>(
+		detail::assemble_scalar_kernel<ScalarKernel, 128><<<grid_num, 128, 0, p.stream->get()>>>(
 			d_bases,
 			d_cache,
 			elem_num,
@@ -427,8 +427,8 @@ namespace polyfem::assembler
 			d_unknown,
 			d_scalar_out.data());
 		double scalar_out = 0.0;
-		cuda::copy_bytes(p.stream, d_scalar_out, Span<double>(&scalar_out, 1));
-		p.stream.sync();
+		cuda::copy_bytes(*p.stream, d_scalar_out, Span<double>(&scalar_out, 1));
+		p.stream->sync();
 		return scalar_out;
 	}
 
@@ -439,7 +439,7 @@ namespace polyfem::assembler
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> vec_out,
-		CudaExecutionPolicy policy = {},
+		ExecutionPolicy policy,
 		double extra_scaling = 1.0)
 	{
 		auto &p = policy;
@@ -462,17 +462,17 @@ namespace polyfem::assembler
 		int elem_num = bases.element_desc.size();
 		assert(vec_out.size() == elem_num);
 
-		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(p.stream, unknown, d_unknown);
+		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
+		cuda::copy_bytes(*p.stream, unknown, d_unknown);
 
 		int grid_num = div_round_up(elem_num, 128);
-		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<grid_num, 128, 0, p.stream.get()>>>(
+		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<grid_num, 128, 0, p.stream->get()>>>(
 			d_bases,
 			d_cache,
 			d_materials,
 			d_unknown,
 			vec_out);
-		p.stream.sync();
+		p.stream->sync();
 	}
 
 	template <typename VectorKernel>
@@ -482,7 +482,7 @@ namespace polyfem::assembler
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		Span<double> vec_out,
-		CudaExecutionPolicy policy = {})
+		ExecutionPolicy policy)
 	{
 		auto &p = policy;
 
@@ -500,22 +500,22 @@ namespace polyfem::assembler
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
-		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(p.stream, unknown, d_unknown);
+		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
+		cuda::copy_bytes(*p.stream, unknown, d_unknown);
 		auto vector_tasks = detail::build_vector_tasks(bases);
 		int task_num = static_cast<int>(vector_tasks.size());
 		assert(static_cast<std::size_t>(task_num) == vector_tasks.size());
 		auto d_vector_tasks = cuda::make_buffer<detail::VectorAssemblyTask>(
-			p.stream,
-			p.mr,
+			*p.stream,
+			*p.mr,
 			vector_tasks.size(),
 			cuda::no_init);
-		cuda::copy_bytes(p.stream, vector_tasks, d_vector_tasks);
+		cuda::copy_bytes(*p.stream, vector_tasks, d_vector_tasks);
 
 		if (task_num > 0)
 		{
 			int grid_num = div_round_up(task_num, 128);
-			detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream.get()>>>(
+			detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream->get()>>>(
 				d_bases,
 				d_cache,
 				d_vector_tasks,
@@ -524,7 +524,7 @@ namespace polyfem::assembler
 				vec_out,
 				extra_scaling);
 		}
-		p.stream.sync();
+		p.stream->sync();
 	}
 
 	template <typename MatrixKernel>
@@ -534,7 +534,7 @@ namespace polyfem::assembler
 		const material::MaterialExprRegistry &material_registry,
 		Span<const double> unknown,
 		BSRMatrixMutableView mat_out,
-		CudaExecutionPolicy policy = {},
+		ExecutionPolicy policy,
 		double extra_scaling = 1.0)
 	{
 		auto &p = policy;
@@ -553,22 +553,22 @@ namespace polyfem::assembler
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, policy);
-		auto d_unknown = cuda::make_buffer<double>(p.stream, p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(p.stream, unknown, d_unknown);
+		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
+		cuda::copy_bytes(*p.stream, unknown, d_unknown);
 		auto matrix_tasks = detail::build_matrix_tasks(bases);
 		int task_num = static_cast<int>(matrix_tasks.size());
 		assert(static_cast<std::size_t>(task_num) == matrix_tasks.size());
 		auto d_matrix_tasks = cuda::make_buffer<detail::MatrixAssemblyTask>(
-			p.stream,
-			p.mr,
+			*p.stream,
+			*p.mr,
 			matrix_tasks.size(),
 			cuda::no_init);
-		cuda::copy_bytes(p.stream, matrix_tasks, d_matrix_tasks);
+		cuda::copy_bytes(*p.stream, matrix_tasks, d_matrix_tasks);
 
 		if (task_num > 0)
 		{
 			int grid_num = div_round_up(task_num, 128);
-			detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream.get()>>>(
+			detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream->get()>>>(
 				d_bases,
 				d_cache,
 				d_matrix_tasks,
@@ -577,7 +577,7 @@ namespace polyfem::assembler
 				mat_out,
 				extra_scaling);
 		}
-		p.stream.sync();
+		p.stream->sync();
 	}
 
 } // namespace polyfem::assembler

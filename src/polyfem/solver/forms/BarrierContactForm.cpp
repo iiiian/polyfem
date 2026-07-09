@@ -186,8 +186,9 @@ namespace polyfem::solver
 		hessian = collision_mesh_.to_full_dof(hessian);
 	}
 
-	void BarrierContactForm::second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian) const
+	void BarrierContactForm::second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian, ExecutionPolicy policy) const
 	{
+		(void)policy;
 		POLYFEM_SCOPED_TIMER("barrier hessian");
 
 		const ipc::PSDProjectionMethod psd_projection_method =

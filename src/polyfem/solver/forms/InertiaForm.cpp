@@ -43,9 +43,10 @@ namespace polyfem::solver
 		return pattern;
 	}
 
-	void InertiaForm::second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian) const
+	void InertiaForm::second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian, ExecutionPolicy policy) const
 	{
 		(void)x;
+		(void)policy;
 
 		assert(mass_.rows() == hessian.rows());
 		assert(mass_.cols() == hessian.cols());

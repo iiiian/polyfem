@@ -39,7 +39,8 @@ namespace polyfem::assembler
 			double t,
 			double dt,
 			Span<double> grad,
-			double scale) const override;
+			double scale,
+			ExecutionPolicy policy) const override;
 		void assemble_hessian_ng(
 			bool is_volume,
 			int n_basis,
@@ -53,7 +54,8 @@ namespace polyfem::assembler
 			double dt,
 			BSRMatrix &hessian,
 			bool project_to_psd,
-			double scale) const override;
+			double scale,
+			ExecutionPolicy policy) const override;
 
 		// rhs for fabbricated solution, compute with automatic sympy code
 		VectorNd compute_rhs(const AutodiffHessianPt &pt) const override;

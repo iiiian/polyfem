@@ -15,8 +15,9 @@ namespace polyfem::solver
 		}
 	} // namespace
 
-	FullNLProblem::FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms)
-		: forms_(forms)
+	FullNLProblem::FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms, ExecutionPolicy policy)
+		: forms_(forms),
+		  execution_policy_(policy)
 	{
 	}
 
@@ -128,7 +129,7 @@ namespace polyfem::solver
 		{
 			if (!f->enabled())
 				continue;
-			f->first_derivative_ng(x, grad_span);
+			f->first_derivative_ng(x, grad_span, execution_policy_);
 		}
 	}
 
@@ -169,15 +170,15 @@ namespace polyfem::solver
 			hessian_bsr_enabled_ = std::move(enabled);
 		}
 
-		hessian_bsr_->reset();
+		hessian_bsr_->reset(execution_policy_);
 		for (auto &f : forms_)
 		{
 			if (!f->enabled())
 				continue;
-			f->second_derivative_ng(x, *hessian_bsr_);
+			f->second_derivative_ng(x, *hessian_bsr_, execution_policy_);
 		}
 
-		hessian = hessian_bsr_->to_stiffness_matrix();
+		hessian = hessian_bsr_->to_stiffness_matrix(execution_policy_);
 	}
 
 	void FullNLProblem::solution_changed(const TVector &x)

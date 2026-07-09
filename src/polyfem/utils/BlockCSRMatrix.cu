@@ -199,7 +199,7 @@ namespace polyfem
 		StiffnessMatrix bsr_to_stiffness_matrix_device_impl(
 			BSRMatrixMutableView bsr,
 			Span<const Eigen::Triplet<double>> triplets,
-			CudaExecutionPolicy policy)
+			ExecutionPolicy policy)
 		{
 			assert(bsr.block_dim > 0);
 			assert(bsr.rows % bsr.block_dim == 0);
@@ -230,11 +230,11 @@ namespace polyfem
 				return out;
 			}
 
-			auto stream = policy.stream.get();
+			auto stream = policy.stream->get();
 
 			// Upload host dynamic triplets to device POD triplets.
 			std::vector<DeviceTriplet> h_triplets;
-			auto d_triplets = cuda::make_buffer<DeviceTriplet>(policy.stream, policy.mr, triplet_nnz, cuda::no_init);
+			auto d_triplets = cuda::make_buffer<DeviceTriplet>(*policy.stream, *policy.mr, triplet_nnz, cuda::no_init);
 			if (triplet_nnz > 0)
 			{
 				h_triplets.reserve(triplet_nnz);
@@ -245,14 +245,14 @@ namespace polyfem
 						static_cast<int>(triplet.col()),
 						triplet.value()});
 				}
-				cuda::copy_bytes(policy.stream, h_triplets, d_triplets);
+				cuda::copy_bytes(*policy.stream, h_triplets, d_triplets);
 			}
 
 			// ---------------------------------------------------------------------------
 			// Map each BSR block index to input block row.
 			// ---------------------------------------------------------------------------
 
-			auto block_row_of_block = cuda::make_buffer<int>(policy.stream, policy.mr, block_nnz, cuda::no_init);
+			auto block_row_of_block = cuda::make_buffer<int>(*policy.stream, *policy.mr, block_nnz, cuda::no_init);
 			build_block_row_of_block<<<div_round_up(bsr.block_rows(), 128), 128, 0, stream>>>(
 				bsr.block_rows(),
 				bsr.row_ptr,
@@ -262,8 +262,8 @@ namespace polyfem
 			// Convert each non-zero to [key, value] pair.
 			// ---------------------------------------------------------------------------
 
-			auto keys_in = cuda::make_buffer<uint64_t>(policy.stream, policy.mr, nnz_total, cuda::no_init);
-			auto values_in = cuda::make_buffer<double>(policy.stream, policy.mr, nnz_total, cuda::no_init);
+			auto keys_in = cuda::make_buffer<uint64_t>(*policy.stream, *policy.mr, nnz_total, cuda::no_init);
+			auto values_in = cuda::make_buffer<double>(*policy.stream, *policy.mr, nnz_total, cuda::no_init);
 			build_keys_values<<<div_round_up(nnz_total, 128), 128, 0, stream>>>(
 				bsr_scalar_nnz,
 				triplet_nnz,
@@ -280,16 +280,16 @@ namespace polyfem
 			// Radix sort by key. Result should be in col major order.
 			// ---------------------------------------------------------------------------
 
-			auto keys_alt = cuda::make_buffer<uint64_t>(policy.stream, policy.mr, nnz_total, cuda::no_init);
-			auto values_alt = cuda::make_buffer<double>(policy.stream, policy.mr, nnz_total, cuda::no_init);
+			auto keys_alt = cuda::make_buffer<uint64_t>(*policy.stream, *policy.mr, nnz_total, cuda::no_init);
+			auto values_alt = cuda::make_buffer<double>(*policy.stream, *policy.mr, nnz_total, cuda::no_init);
 			cub::DoubleBuffer<uint64_t> d_keys(keys_in.data(), keys_alt.data());
 			cub::DoubleBuffer<double> d_values(values_in.data(), values_alt.data());
-			auto cub_tmp = cuda::make_buffer<char>(policy.stream, policy.mr, 0, cuda::no_init);
+			auto cub_tmp = cuda::make_buffer<char>(*policy.stream, *policy.mr, 0, cuda::no_init);
 			auto make_cub_tmp = [&cub_tmp, &policy](size_t required_size) {
 				if (cub_tmp.size() < required_size)
 				{
 					cub_tmp.destroy();
-					cub_tmp = cuda::make_buffer<char>(policy.stream, policy.mr, required_size, cuda::no_init);
+					cub_tmp = cuda::make_buffer<char>(*policy.stream, *policy.mr, required_size, cuda::no_init);
 				}
 				return cub_tmp.data();
 			};
@@ -324,12 +324,12 @@ namespace polyfem
 			// This step computes non-zero scalar num + value count for each scalar.
 			// ---------------------------------------------------------------------------
 
-			auto unique_keys = cuda::make_buffer<uint64_t>(policy.stream, policy.mr, nnz_total, cuda::no_init);
+			auto unique_keys = cuda::make_buffer<uint64_t>(*policy.stream, *policy.mr, nnz_total, cuda::no_init);
 
 			// We later use this buffer to do exclusive sum for value offsets.
 			// Thus the size is nnz_total + 1.
-			auto counts = cuda::make_buffer<int>(policy.stream, policy.mr, nnz_total + 1, cuda::no_init);
-			auto num_runs = cuda::make_buffer<int>(policy.stream, policy.mr, 1, cuda::no_init);
+			auto counts = cuda::make_buffer<int>(*policy.stream, *policy.mr, nnz_total + 1, cuda::no_init);
+			auto num_runs = cuda::make_buffer<int>(*policy.stream, *policy.mr, 1, cuda::no_init);
 
 			size_t rle_tmp_size = 0;
 			cub::DeviceRunLengthEncode::Encode(nullptr,
@@ -357,16 +357,16 @@ namespace polyfem
 
 			int unique_nnz = 0;
 			cudaMemcpyAsync(&unique_nnz, num_runs.data(), sizeof(int), cudaMemcpyDeviceToHost, stream);
-			policy.stream.sync();
+			policy.stream->sync();
 			num_runs.destroy();
 
-			auto cols = cuda::make_buffer<int>(policy.stream, policy.mr, unique_nnz, cuda::no_init);
+			auto cols = cuda::make_buffer<int>(*policy.stream, *policy.mr, unique_nnz, cuda::no_init);
 			// Extract col index from packed key.
 			extract_cols<<<div_round_up(unique_nnz, 128), 128, 0, stream>>>(
 				Span<const uint64_t>(unique_keys.data(), unique_nnz),
 				cols);
 			// Histogram count nnz scalar per col.
-			auto hist = cuda::make_buffer<int>(policy.stream, policy.mr, bsr.cols + 1, 0);
+			auto hist = cuda::make_buffer<int>(*policy.stream, *policy.mr, bsr.cols + 1, 0);
 			// As of 20260507, CCCL v3.0.0 histogram has a out-of-bound memory write bug.
 			// If the bug is fixed in the future you shall replace the homebrew histogram.
 			histogram<<<div_round_up(unique_nnz, 128), 128, 0, stream>>>(
@@ -374,7 +374,7 @@ namespace polyfem
 				hist,
 				bsr.cols);
 			// Exclusive scan compute CSC col ptr.
-			auto csc_col_ptr = cuda::make_buffer<int>(policy.stream, policy.mr, bsr.cols + 1, cuda::no_init);
+			auto csc_col_ptr = cuda::make_buffer<int>(*policy.stream, *policy.mr, bsr.cols + 1, cuda::no_init);
 			size_t scan_tmp_size = 0;
 			cub::DeviceScan::ExclusiveSum(nullptr,
 										  scan_tmp_size,
@@ -396,7 +396,7 @@ namespace polyfem
 			// ---------------------------------------------------------------------------
 
 			// Compute value offsets for each scalar.
-			auto value_offsets = cuda::make_buffer<int>(policy.stream, policy.mr, unique_nnz + 1, cuda::no_init);
+			auto value_offsets = cuda::make_buffer<int>(*policy.stream, *policy.mr, unique_nnz + 1, cuda::no_init);
 			cudaMemsetAsync(counts.data() + unique_nnz, 0, sizeof(int), stream);
 			size_t off_tmp_size = 0;
 			cub::DeviceScan::ExclusiveSum(nullptr,
@@ -415,8 +415,8 @@ namespace polyfem
 			cub_tmp.destroy();
 
 			// Fill rows and vals.
-			auto csc_rows = cuda::make_buffer<int>(policy.stream, policy.mr, unique_nnz, cuda::no_init);
-			auto csc_vals = cuda::make_buffer<double>(policy.stream, policy.mr, unique_nnz, cuda::no_init);
+			auto csc_rows = cuda::make_buffer<int>(*policy.stream, *policy.mr, unique_nnz, cuda::no_init);
+			auto csc_vals = cuda::make_buffer<double>(*policy.stream, *policy.mr, unique_nnz, cuda::no_init);
 			fill_csc_rows_vals<<<div_round_up(unique_nnz, 128), 128, 0, stream>>>(
 				Span<const uint64_t>(unique_keys.data(), unique_nnz),
 				value_offsets,
@@ -456,12 +456,12 @@ namespace polyfem
 			csc_rows.destroy();
 			csc_vals.destroy();
 
-			policy.stream.sync();
+			policy.stream->sync();
 			return stiffness_from_csc(bsr.rows, bsr.cols, h_col_ptr, h_row_idx, h_values);
 		}
 	} // namespace
 
-	StiffnessMatrix BSRMatrix::to_stiffness_matrix_device(CudaExecutionPolicy policy)
+	StiffnessMatrix BSRMatrix::to_stiffness_matrix_device(ExecutionPolicy policy)
 	{
 		if (!has_allocate_device_value())
 		{
@@ -476,14 +476,14 @@ namespace polyfem
 			assert(host_view.values.size() == device_view.values.size());
 
 			auto host_values = cuda::make_buffer<double>(
-				policy.stream,
-				policy.mr,
+				*policy.stream,
+				*policy.mr,
 				host_view.values.size(),
 				cuda::no_init);
-			cuda::copy_bytes(policy.stream, host_view.values, host_values);
+			cuda::copy_bytes(*policy.stream, host_view.values, host_values);
 			int grid_num = div_round_up(device_view.values.size(), 128);
-			add_values<<<grid_num, 128, 0, policy.stream.get()>>>(device_view.values, host_values);
-			policy.stream.sync();
+			add_values<<<grid_num, 128, 0, policy.stream->get()>>>(device_view.values, host_values);
+			policy.stream->sync();
 		}
 
 		return bsr_to_stiffness_matrix_device_impl(device_view, dynamic_values_, policy);

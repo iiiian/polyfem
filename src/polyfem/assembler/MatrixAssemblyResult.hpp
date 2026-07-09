@@ -15,9 +15,9 @@ namespace polyfem::assembler
 		{
 		}
 
-		void reset()
+		void reset(ExecutionPolicy policy = {})
 		{
-			static_mat.reset();
+			static_mat.reset(policy);
 			dynamic_mat.clear();
 		}
 

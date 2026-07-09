@@ -338,15 +338,15 @@ namespace polyfem::assembler
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	AssemblyEssentialsView AssemblyEssentials::device_view(CudaExecutionPolicy policy)
+	AssemblyEssentialsView AssemblyEssentials::device_view(ExecutionPolicy policy)
 	{
 		auto &p = policy;
 		if (need_host_device_sync_)
 		{
-			d_element_desc_ = cuda::make_buffer<ElementDesc>(p.stream, p.mr, element_desc.size(), cuda::no_init);
-			cuda::copy_bytes(p.stream, element_desc, *d_element_desc_);
+			d_element_desc_ = cuda::make_buffer<ElementDesc>(*p.stream, *p.mr, element_desc.size(), cuda::no_init);
+			cuda::copy_bytes(*p.stream, element_desc, *d_element_desc_);
 			need_host_device_sync_ = false;
-			p.stream.sync();
+			p.stream->sync();
 		}
 
 		return AssemblyEssentialsView{

@@ -16,6 +16,8 @@ set(SOURCES
 	EnableWarnings.hpp
 	ExpressionValue.cpp
 	ExpressionValue.hpp
+	ExecutionPolicy.cpp
+	ExecutionPolicy.hpp
 	GeogramUtils.cpp
 	GeogramUtils.hpp
 	GeometryUtils.cpp
@@ -69,8 +71,6 @@ set(SOURCES
 if(POLYFEM_WITH_CUDA)
 	list(APPEND SOURCES
 		BlockCSRMatrix.cu
-		CUDAExecutionPolicy.cpp
-		CUDAExecutionPolicy.hpp
 	)
 endif()
 

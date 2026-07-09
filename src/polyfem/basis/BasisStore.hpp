@@ -7,7 +7,7 @@
 #include <functional>
 
 #ifdef POLYFEM_WITH_CUDA
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
 #endif
 
@@ -103,7 +103,7 @@ namespace polyfem::basis
 		bool need_host_device_sync_ = true;
 
 		/// Return view on device memory. Lazily sync data.
-		BasisStoreView device_view(CudaExecutionPolicy policy = {});
+		BasisStoreView device_view(ExecutionPolicy policy);
 
 		/// Release device storage.
 		void clear_device_storage();

@@ -6,7 +6,7 @@
 #include <cassert>
 
 #ifdef POLYFEM_WITH_CUDA
-#include <polyfem/utils/CUDAExecutionPolicy.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/CUDAUtils.hpp>
 #include <cuda/buffer>
 #include <cuda/algorithm>
@@ -64,23 +64,23 @@ namespace polyfem::assembler
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	DofMappingStoreView DofMappingStore::device_view(CudaExecutionPolicy policy)
+	DofMappingStoreView DofMappingStore::device_view(ExecutionPolicy policy)
 	{
 
 		auto &p = policy;
 		if (need_host_device_sync_)
 		{
-			d_mapping_desc_ = cuda::make_buffer<DofMappingDesc>(p.stream, p.mr, mapping_desc_.size(), cuda::no_init);
-			d_node_ids_ = cuda::make_buffer<int>(p.stream, p.mr, node_ids_.size(), cuda::no_init);
-			d_weights_ = cuda::make_buffer<double>(p.stream, p.mr, weights_.size(), cuda::no_init);
-			d_node_positions_ = cuda::make_buffer<double>(p.stream, p.mr, node_positions_.size(), cuda::no_init);
-			cuda::copy_bytes(p.stream, mapping_desc_, *d_mapping_desc_);
-			cuda::copy_bytes(p.stream, node_ids_, *d_node_ids_);
-			cuda::copy_bytes(p.stream, weights_, *d_weights_);
-			cuda::copy_bytes(p.stream, node_positions_, *d_node_positions_);
+			d_mapping_desc_ = cuda::make_buffer<DofMappingDesc>(*p.stream, *p.mr, mapping_desc_.size(), cuda::no_init);
+			d_node_ids_ = cuda::make_buffer<int>(*p.stream, *p.mr, node_ids_.size(), cuda::no_init);
+			d_weights_ = cuda::make_buffer<double>(*p.stream, *p.mr, weights_.size(), cuda::no_init);
+			d_node_positions_ = cuda::make_buffer<double>(*p.stream, *p.mr, node_positions_.size(), cuda::no_init);
+			cuda::copy_bytes(*p.stream, mapping_desc_, *d_mapping_desc_);
+			cuda::copy_bytes(*p.stream, node_ids_, *d_node_ids_);
+			cuda::copy_bytes(*p.stream, weights_, *d_weights_);
+			cuda::copy_bytes(*p.stream, node_positions_, *d_node_positions_);
 			need_host_device_sync_ = false;
 
-			p.stream.sync();
+			p.stream->sync();
 		}
 		return DofMappingStoreView{*d_mapping_desc_, *d_node_ids_, *d_weights_, *d_node_positions_};
 	}

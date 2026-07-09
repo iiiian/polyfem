@@ -153,7 +153,8 @@ namespace polyfem::assembler
 			const double t,
 			const double dt,
 			Span<double> grad,
-			const double scale) const
+			const double scale,
+			ExecutionPolicy policy) const
 		{
 			log_and_throw_error("NG assemble grad not implemented by {}!", name());
 		}
@@ -171,7 +172,8 @@ namespace polyfem::assembler
 			const double dt,
 			BSRMatrix &hessian,
 			const bool project_to_psd,
-			const double scale) const
+			const double scale,
+			ExecutionPolicy policy) const
 		{
 			log_and_throw_error("NG assemble hessian not implemented by {}!", name());
 		}

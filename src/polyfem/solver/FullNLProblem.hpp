@@ -14,7 +14,7 @@ namespace polyfem::solver
 	class FullNLProblem : public polysolve::nonlinear::Problem
 	{
 	public:
-		FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms);
+		FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms, ExecutionPolicy policy);
 		virtual ~FullNLProblem() = default;
 		virtual void init(const TVector &x0) override;
 
@@ -53,6 +53,7 @@ namespace polyfem::solver
 
 	protected:
 		std::vector<std::shared_ptr<Form>> forms_;
+		ExecutionPolicy execution_policy_;
 		mutable int hessian_bsr_ndof_ = -1;
 		mutable std::vector<uint8_t> hessian_bsr_enabled_;
 		mutable std::optional<BSRMatrix> hessian_bsr_;

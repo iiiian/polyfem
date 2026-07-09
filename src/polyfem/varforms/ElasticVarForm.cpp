@@ -65,9 +65,9 @@ namespace polyfem::varform
 		dt = 0;
 	}
 
-	void ElasticVarForm::init(const std::string &formulation, const Units &units, const json &args, const std::string &out_path)
+	void ElasticVarForm::init(const std::string &formulation, const Units &units, const json &args, const std::string &out_path, ExecutionPolicy policy)
 	{
-		VarForm::init(formulation, units, args, out_path);
+		VarForm::init(formulation, units, args, out_path, policy);
 		const bool is_time_dependent = args.contains("time") && !args["time"].is_null();
 
 		primary_assembler_ = assembler::AssemblerUtils::make_assembler(formulation);
@@ -322,8 +322,9 @@ namespace polyfem::varform
 					mesh.is_volume(), space_.n_bases, *space_.assembly, *geom_assembly, mass_cache, *material_expr_registry_,
 					Span<const double>{},
 					Span<const double>{},
-					/*t=*/0, /*dt=*/0, mass_bsr, /*project_to_psd=*/false, /*scale=*/1);
-				mass_ = mass_bsr.to_stiffness_matrix();
+					/*t=*/0, /*dt=*/0, mass_bsr, /*project_to_psd=*/false, /*scale=*/1,
+					execution_policy_);
+				mass_ = mass_bsr.to_stiffness_matrix(execution_policy_);
 				assembled_mass_ng = true;
 			}
 		}

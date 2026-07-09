@@ -277,12 +277,13 @@ namespace polyfem::varform
 		mesh_ = nullptr;
 	}
 
-	void VarForm::init(const std::string &formulation, const Units &units, const json &args, const std::string &out_path)
+	void VarForm::init(const std::string &formulation, const Units &units, const json &args, const std::string &out_path, ExecutionPolicy policy)
 	{
 		reset();
 
 		this->units = units;
 		this->args = args;
+		execution_policy_ = policy;
 
 		if (utils::is_param_valid(args, "root_path"))
 			root_path = args["root_path"].get<std::string>();

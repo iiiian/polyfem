@@ -97,8 +97,9 @@ namespace polyfem::solver
 		const int full_size,
 		const std::vector<std::shared_ptr<Form>> &forms,
 		const std::vector<std::shared_ptr<AugmentedLagrangianForm>> &penalty_forms,
-		const std::shared_ptr<polysolve::linear::Solver> &solver)
-		: FullNLProblem(forms),
+		const std::shared_ptr<polysolve::linear::Solver> &solver,
+		ExecutionPolicy policy)
+		: FullNLProblem(forms, policy),
 		  full_size_(full_size),
 		  t_(0),
 		  penalty_forms_(penalty_forms),
@@ -118,8 +119,9 @@ namespace polyfem::solver
 		const double char_length,
 		const double char_force,
 		StiffnessMatrix lumped_mass,
-		const int dimension)
-		: FullNLProblem(forms),
+		const int dimension,
+		ExecutionPolicy policy)
+		: FullNLProblem(forms, policy),
 		  full_size_(full_size),
 		  t_(t),
 		  penalty_forms_(penalty_forms),
@@ -265,7 +267,7 @@ namespace polyfem::solver
 
 			std::vector<std::shared_ptr<Form>> tmp;
 			tmp.insert(tmp.end(), penalty_forms_.begin(), penalty_forms_.end());
-			penalty_problem_ = std::make_shared<FullNLProblem>(tmp);
+			penalty_problem_ = std::make_shared<FullNLProblem>(tmp, execution_policy_);
 
 			update_constraint_values();
 
@@ -433,7 +435,7 @@ namespace polyfem::solver
 
 		std::vector<std::shared_ptr<Form>> tmp;
 		tmp.insert(tmp.end(), penalty_forms_.begin(), penalty_forms_.end());
-		penalty_problem_ = std::make_shared<FullNLProblem>(tmp);
+		penalty_problem_ = std::make_shared<FullNLProblem>(tmp, execution_policy_);
 
 		update_constraint_values();
 	}

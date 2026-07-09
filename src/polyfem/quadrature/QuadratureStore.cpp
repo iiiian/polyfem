@@ -1,4 +1,4 @@
-#include "polyfem/utils/CUDAExecutionPolicy.hpp"
+#include "polyfem/utils/ExecutionPolicy.hpp"
 #include <polyfem/quadrature/QuadratureStore.hpp>
 
 #include <polyfem/quadrature/Quadrature.hpp>
@@ -121,22 +121,22 @@ namespace polyfem::quadrature
 	}
 
 #ifdef POLYFEM_WITH_CUDA
-	QuadratureStoreView QuadratureStore::device_view(CudaExecutionPolicy policy)
+	QuadratureStoreView QuadratureStore::device_view(ExecutionPolicy policy)
 	{
 		auto &p = policy;
 		if (need_host_device_sync_)
 		{
-			d_x_ = cuda::make_buffer<double>(p.stream, p.mr, x_.size(), cuda::no_init);
-			d_y_ = cuda::make_buffer<double>(p.stream, p.mr, y_.size(), cuda::no_init);
-			d_z_ = cuda::make_buffer<double>(p.stream, p.mr, z_.size(), cuda::no_init);
-			d_w_ = cuda::make_buffer<double>(p.stream, p.mr, w_.size(), cuda::no_init);
-			cuda::copy_bytes(p.stream, x_, *d_x_);
-			cuda::copy_bytes(p.stream, y_, *d_y_);
-			cuda::copy_bytes(p.stream, z_, *d_z_);
-			cuda::copy_bytes(p.stream, w_, *d_w_);
+			d_x_ = cuda::make_buffer<double>(*p.stream, *p.mr, x_.size(), cuda::no_init);
+			d_y_ = cuda::make_buffer<double>(*p.stream, *p.mr, y_.size(), cuda::no_init);
+			d_z_ = cuda::make_buffer<double>(*p.stream, *p.mr, z_.size(), cuda::no_init);
+			d_w_ = cuda::make_buffer<double>(*p.stream, *p.mr, w_.size(), cuda::no_init);
+			cuda::copy_bytes(*p.stream, x_, *d_x_);
+			cuda::copy_bytes(*p.stream, y_, *d_y_);
+			cuda::copy_bytes(*p.stream, z_, *d_z_);
+			cuda::copy_bytes(*p.stream, w_, *d_w_);
 			need_host_device_sync_ = false;
 
-			p.stream.sync();
+			p.stream->sync();
 		}
 		return QuadratureStoreView{*d_x_, *d_y_, *d_z_, *d_w_};
 	}

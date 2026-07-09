@@ -197,7 +197,6 @@ if (POLYFEM_WITH_CUDA)
   # Just like what normal cpp program does.
   set_target_properties(polyfem PROPERTIES
       CUDA_SEPARABLE_COMPILATION ON
-      CUDA_RESOLVE_DEVICE_SYMBOLS ON
   )
 
   # Enable __device__ lambda

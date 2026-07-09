@@ -35,17 +35,17 @@ namespace polyfem::basis
 
 #ifdef POLYFEM_WITH_CUDA
 	/// Return view on device memory. Lazily sync data.
-	BasisStoreView BasisStore::device_view(CudaExecutionPolicy policy)
+	BasisStoreView BasisStore::device_view(ExecutionPolicy policy)
 	{
 		auto &p = policy;
 
 		if (need_host_device_sync_)
 		{
-			d_rational_weights_ = cuda::make_buffer<double>(p.stream, p.mr, rational_weights_.size(), cuda::no_init);
-			cuda::copy_bytes(p.stream, rational_weights_, *d_rational_weights_);
+			d_rational_weights_ = cuda::make_buffer<double>(*p.stream, *p.mr, rational_weights_.size(), cuda::no_init);
+			cuda::copy_bytes(*p.stream, rational_weights_, *d_rational_weights_);
 			need_host_device_sync_ = false;
 
-			p.stream.sync();
+			p.stream->sync();
 		}
 		return BasisStoreView{*d_rational_weights_, {}};
 	}

@@ -24,7 +24,7 @@ namespace polyfem::solver
 		std::string name() const override { return "inertia"; }
 
 		std::optional<BSRSparsityPattern> hessian_sparsity_pattern_ng() const override;
-		void second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian) const override;
+		void second_derivative_ng(const Eigen::VectorXd &x, BSRMatrix &hessian, ExecutionPolicy policy) const override;
 
 	protected:
 		/// @brief Compute the value of the form

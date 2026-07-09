@@ -7,6 +7,7 @@
 #include <polyfem/mesh/mesh3D/Mesh3D.hpp>
 
 #include <polyfem/utils/GeogramUtils.hpp>
+#include <polyfem/utils/ExecutionPolicy.hpp>
 #include <polyfem/utils/JSONUtils.hpp>
 #include <polyfem/utils/Logger.hpp>
 #include <polyfem/utils/StringUtils.hpp>
@@ -86,6 +87,16 @@ namespace polyfem
 		bool contact_enabled(const json &args)
 		{
 			return args["contact"]["enabled"];
+		}
+
+		ExecutionMode execution_mode(const json &args)
+		{
+			return execution_mode_from_string(args["execution"]["mode"].get<std::string>());
+		}
+
+		int cuda_device(const json &args)
+		{
+			return args["execution"]["cuda_device"].get<int>();
 		}
 
 		void init_time(json &args, Units &units)
@@ -318,6 +329,9 @@ namespace polyfem
 
 		logger().info("Saving output to {}", output_dir);
 
+		execution_runtime = std::make_shared<ExecutionRuntime>(execution_mode(args), cuda_device(args));
+		logger().info("Execution mode: {}", execution_mode_to_string(execution_runtime->mode));
+
 		set_max_threads(args["solver"]["max_threads"]);
 
 		init_time(args, units);
@@ -358,7 +372,7 @@ namespace polyfem
 
 		logger().info("Using variational formulation: {}", variational_formulation->name());
 		args["contact"]["_dhat_was_explicit"] = contact_dhat_was_explicit;
-		variational_formulation->init(formulation, units, args, output_dir);
+		variational_formulation->init(formulation, units, args, output_dir, execution_runtime->policy());
 		args["contact"].erase("_dhat_was_explicit");
 	}
 
