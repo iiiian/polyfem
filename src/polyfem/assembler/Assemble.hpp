@@ -54,6 +54,7 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	double assemble_scalar(
+		ScalarKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -63,19 +64,23 @@ namespace polyfem::assembler
 		ExecutionPolicy policy = {})
 	{
 #ifdef POLYFEM_WITH_CUDA
-		if (policy.mode == ExecutionMode::Hybrid && detail::cache_is_complete(bases, cache, false))
+		if constexpr (ScalarKernel::SUPPORT_DEVICE_EVAL)
 		{
-			return assemble_scalar_on_device<ScalarKernel>(
-				bases, cache, material_registry, unknown, time, policy);
+			if (policy.mode == ExecutionMode::Hybrid && detail::cache_is_complete(bases, cache, false))
+			{
+				return assemble_scalar_on_device(
+					kernel, bases, cache, material_registry, unknown, time, policy);
+			}
 		}
 #endif
 
-		return assemble_scalar_on_host<ScalarKernel>(
-			bases, geom_bases, cache, material_registry, unknown, time);
+		return assemble_scalar_on_host(
+			kernel, bases, geom_bases, cache, material_registry, unknown, time);
 	}
 
 	template <typename ScalarKernel>
 	void assemble_scalar_per_element(
+		ScalarKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -86,21 +91,26 @@ namespace polyfem::assembler
 		ExecutionPolicy policy = {})
 	{
 #ifdef POLYFEM_WITH_CUDA
-		if (policy.mode == ExecutionMode::Hybrid && detail::cache_is_complete(bases, cache, false))
+		if constexpr (ScalarKernel::SUPPORT_DEVICE_EVAL)
 		{
-			assemble_scalar_per_element_on_device<ScalarKernel>(
-				bases,
-				cache,
-				material_registry,
-				unknown,
-				scalar_out.device_view(policy),
-				policy,
-				time);
-			return;
+			if (policy.mode == ExecutionMode::Hybrid && detail::cache_is_complete(bases, cache, false))
+			{
+				assemble_scalar_per_element_on_device(
+					kernel,
+					bases,
+					cache,
+					material_registry,
+					unknown,
+					scalar_out.device_view(policy),
+					policy,
+					time);
+				return;
+			}
 		}
 #endif
 
-		assemble_scalar_per_element_on_host<ScalarKernel>(
+		assemble_scalar_per_element_on_host(
+			kernel,
 			bases,
 			geom_bases,
 			cache,
@@ -112,6 +122,7 @@ namespace polyfem::assembler
 
 	template <typename VectorKernel>
 	void assemble_vector(
+		VectorKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -123,22 +134,27 @@ namespace polyfem::assembler
 		ExecutionPolicy policy = {})
 	{
 #ifdef POLYFEM_WITH_CUDA
-		if (policy.mode == ExecutionMode::Hybrid && detail::cache_is_complete(bases, cache, false))
+		if constexpr (VectorKernel::SUPPORT_DEVICE_EVAL)
 		{
-			assemble_vector_on_device<VectorKernel>(
-				bases,
-				cache,
-				material_registry,
-				unknown,
-				vector_out.device_view(policy),
-				policy,
-				time,
-				extra_scaling);
-			return;
+			if (policy.mode == ExecutionMode::Hybrid && detail::cache_is_complete(bases, cache, false))
+			{
+				assemble_vector_on_device(
+					kernel,
+					bases,
+					cache,
+					material_registry,
+					unknown,
+					vector_out.device_view(policy),
+					policy,
+					time,
+					extra_scaling);
+				return;
+			}
 		}
 #endif
 
-		assemble_vector_on_host<VectorKernel>(
+		assemble_vector_on_host(
+			kernel,
 			bases,
 			geom_bases,
 			cache,
@@ -151,6 +167,7 @@ namespace polyfem::assembler
 
 	template <typename MatrixKernel>
 	void assemble_matrix(
+		MatrixKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -164,22 +181,27 @@ namespace polyfem::assembler
 		ExecutionPolicy policy = {})
 	{
 #ifdef POLYFEM_WITH_CUDA
-		if (policy.mode == ExecutionMode::Hybrid && !project_to_psd && detail::cache_is_complete(bases, cache, is_mass))
+		if constexpr (MatrixKernel::SUPPORT_DEVICE_EVAL)
 		{
-			assemble_matrix_on_device<MatrixKernel>(
-				bases,
-				cache,
-				material_registry,
-				unknown,
-				matrix_out.device_static_view(policy),
-				policy,
-				time,
-				extra_scaling);
-			return;
+			if (policy.mode == ExecutionMode::Hybrid && !project_to_psd && detail::cache_is_complete(bases, cache, is_mass))
+			{
+				assemble_matrix_on_device(
+					kernel,
+					bases,
+					cache,
+					material_registry,
+					unknown,
+					matrix_out.device_static_view(policy),
+					policy,
+					time,
+					extra_scaling);
+				return;
+			}
 		}
 #endif
 
-		assemble_matrix_on_host<MatrixKernel>(
+		assemble_matrix_on_host(
+			kernel,
 			bases,
 			geom_bases,
 			cache,

@@ -20,12 +20,13 @@ namespace polyfem::assembler
 		static constexpr int DIM = dim;
 		static constexpr bool NEED_UNKNOWN_VALUE = false;
 		static constexpr bool NEED_UNKNOWN_GRAD = true;
+		static constexpr bool SUPPORT_DEVICE_EVAL = true;
 
 		template <typename Scalar>
-		POLYFEM_BOTH static Scalar eval_scalar(
+		POLYFEM_BOTH Scalar eval_scalar(
 			Span<const Scalar> u,
 			Span<const Scalar> gradu,
-			const Material &material)
+			const Material &material) const
 		{
 			assert(gradu.size() == dim * dim);
 

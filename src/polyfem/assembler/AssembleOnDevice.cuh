@@ -110,6 +110,7 @@ namespace polyfem::assembler
 
 		template <typename ScalarKernel, int BLOCK_SIZE>
 		__global__ void assemble_scalar_kernel(
+			ScalarKernel kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			int elem_num,
@@ -134,7 +135,7 @@ namespace polyfem::assembler
 					// Material is per cached quadrature point, matching weighted_measure.
 					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-					double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
+					double local_scalar = kernel.eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
 					scalar += local_scalar * elem_cache.get_weighted_measure(quad_id);
 				}
 			}
@@ -150,6 +151,7 @@ namespace polyfem::assembler
 
 		template <typename ScalarKernel>
 		__global__ void assemble_scalar_per_element_kernel(
+			ScalarKernel kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const typename ScalarKernel::Material> materials,
@@ -174,7 +176,7 @@ namespace polyfem::assembler
 				// Material is per cached quadrature point, matching weighted_measure.
 				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				double local_scalar = ScalarKernel::eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
+				double local_scalar = kernel.eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
 				scalar += local_scalar * elem_cache.get_weighted_measure(quad_id);
 			}
 
@@ -183,6 +185,7 @@ namespace polyfem::assembler
 
 		template <typename VectorKernel>
 		__global__ void assemble_vector_kernel(
+			VectorKernel kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const DeviceVectorAssemblyTask> tasks,
@@ -216,7 +219,7 @@ namespace polyfem::assembler
 				// Material is per cached quadrature point, matching weighted_measure.
 				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				Vec kernel_out = VectorKernel::eval_vector(elem_id, quad_id, basis_id, bases, elem_cache, material, unknown);
+				Vec kernel_out = kernel.eval_vector(elem_id, quad_id, basis_id, bases, elem_cache, material, unknown);
 				grad_i += kernel_out * extra_scaling * elem_cache.get_weighted_measure(quad_id);
 			}
 
@@ -229,6 +232,7 @@ namespace polyfem::assembler
 
 		template <typename MatrixKernel>
 		__global__ void assemble_matrix_kernel(
+			MatrixKernel kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const DeviceMatrixAssemblyTask> tasks,
@@ -264,7 +268,7 @@ namespace polyfem::assembler
 				// Material is per cached quadrature point, matching weighted_measure.
 				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				Mat kernel_out = MatrixKernel::eval_matrix(elem_id, quad_id, bi, bj, bases, elem_cache, material, unknown);
+				Mat kernel_out = kernel.eval_matrix(elem_id, quad_id, bi, bj, bases, elem_cache, material, unknown);
 				mat_ij += kernel_out * extra_scaling * elem_cache.get_weighted_measure(quad_id);
 			}
 
@@ -297,36 +301,48 @@ namespace polyfem::assembler
 			int elem_num = bases.element_desc.size();
 			assert(elem_num != 0);
 
-			std::vector<Material> materials(global_material_num);
-			utils::maybe_parallel_for(elem_num, [&cache_view, &material_registry, &materials, time](int elem_id) {
-				auto material_expr = material_registry.get<typename Material::ExprType>(elem_id);
-				if (material_expr == nullptr)
-				{
-					throw std::runtime_error("Material missing!");
-				}
+			if constexpr (std::is_same_v<Material, material::Dummy<double>>)
+			{
+				auto d_materials =
+					cuda::make_buffer<Material>(*policy.stream, *policy.mr, 0, cuda::no_init);
+				policy.stream->sync();
+				return d_materials;
+			}
+			else
+			{
+				std::vector<Material> materials(global_material_num);
+				utils::maybe_parallel_for(elem_num, [&cache_view, &material_registry, &materials, time](int elem_id) {
+					auto material_expr = material_registry.get<typename Material::ExprType>(elem_id);
+					if (material_expr == nullptr)
+					{
+						throw std::runtime_error("Material missing!");
+					}
 
-				auto &cache_desc = cache_view.desc[elem_id];
-				ElementAssemblyCacheView elem_cache = cache_view.slice(elem_id);
-				for (int q = 0; q < cache_desc.weighted_measure_range.num; ++q)
-				{
-					double x = elem_cache.get_physical_x(q);
-					double y = (dim >= 2) ? elem_cache.get_physical_y(q) : 0.0;
-					double z = (dim >= 3) ? elem_cache.get_physical_z(q) : 0.0;
-					Material m = material_expr->eval_expr(x, y, z, time, elem_id);
+					auto &cache_desc = cache_view.desc[elem_id];
+					ElementAssemblyCacheView elem_cache = cache_view.slice(elem_id);
+					for (int q = 0; q < cache_desc.weighted_measure_range.num; ++q)
+					{
+						double x = elem_cache.get_physical_x(q);
+						double y = (dim >= 2) ? elem_cache.get_physical_y(q) : 0.0;
+						double z = (dim >= 3) ? elem_cache.get_physical_z(q) : 0.0;
+						Material m = material_expr->eval_expr(x, y, z, time, elem_id);
 
-					materials[cache_desc.weighted_measure_range.offset + q] = std::move(m);
-				}
-			});
-			auto d_materials =
-				cuda::make_buffer<Material>(*policy.stream, *policy.mr, global_material_num, cuda::no_init);
-			cuda::copy_bytes(*policy.stream, materials, d_materials);
-			policy.stream->sync();
-			return d_materials;
+						materials[cache_desc.weighted_measure_range.offset + q] = std::move(m);
+					}
+				});
+
+				auto d_materials =
+					cuda::make_buffer<Material>(*policy.stream, *policy.mr, global_material_num, cuda::no_init);
+				cuda::copy_bytes(*policy.stream, materials, d_materials);
+				policy.stream->sync();
+				return d_materials;
+			}
 		}
 	} // namespace detail
 
 	template <typename ScalarKernel>
 	double assemble_scalar_on_device(
+		ScalarKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
@@ -354,6 +370,7 @@ namespace polyfem::assembler
 		int elem_num = bases.element_desc.size();
 		int grid_num = div_round_up(elem_num, 128);
 		detail::assemble_scalar_kernel<ScalarKernel, 128><<<grid_num, 128, 0, p.stream->get()>>>(
+			kernel,
 			d_bases,
 			d_cache,
 			elem_num,
@@ -368,6 +385,7 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	void assemble_scalar_per_element_on_device(
+		ScalarKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
@@ -398,6 +416,7 @@ namespace polyfem::assembler
 
 		int grid_num = div_round_up(elem_num, 128);
 		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<grid_num, 128, 0, p.stream->get()>>>(
+			kernel,
 			d_bases,
 			d_cache,
 			d_materials,
@@ -408,6 +427,7 @@ namespace polyfem::assembler
 
 	template <typename VectorKernel>
 	void assemble_vector_on_device(
+		VectorKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
@@ -438,6 +458,7 @@ namespace polyfem::assembler
 
 		int grid_num = div_round_up(task_num, 128);
 		detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream->get()>>>(
+			kernel,
 			d_bases,
 			d_cache,
 			d_vector_tasks,
@@ -450,6 +471,7 @@ namespace polyfem::assembler
 
 	template <typename MatrixKernel>
 	void assemble_matrix_on_device(
+		MatrixKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyCache &cache,
 		const material::MaterialExprRegistry &material_registry,
@@ -480,6 +502,7 @@ namespace polyfem::assembler
 
 		int grid_num = div_round_up(task_num, 128);
 		detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream->get()>>>(
+			kernel,
 			d_bases,
 			d_cache,
 			d_matrix_tasks,

@@ -19,7 +19,7 @@ namespace polyfem::assembler
 	namespace detail
 	{
 
-		struct Dummy
+		struct NoStorage
 		{
 		};
 
@@ -63,14 +63,17 @@ namespace polyfem::assembler
 		using Material = typename EnergyKernel::Material;
 		static constexpr int VALUE_DIM = EnergyKernel::VALUE_DIM;
 		static constexpr int DIM = EnergyKernel::DIM;
+		static constexpr bool SUPPORT_DEVICE_EVAL = EnergyKernel::SUPPORT_DEVICE_EVAL;
 
-		POLYFEM_BOTH static double eval_scalar(
+		EnergyKernel energy;
+
+		POLYFEM_BOTH double eval_scalar(
 			int elem_id,
 			int quad_id,
 			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
-			Span<const double> unknown)
+			Span<const double> unknown) const
 		{
 
 			using Vec = Eigen::Vector<double, VALUE_DIM>;
@@ -111,8 +114,7 @@ namespace polyfem::assembler
 				gradu = Span<const double>(gradu_value.data(), gradu_value.size());
 			}
 
-			double energy = EnergyKernel::template eval_scalar<double>(u, gradu, material);
-			return energy;
+			return energy.template eval_scalar<double>(u, gradu, material);
 		}
 	};
 
@@ -122,15 +124,18 @@ namespace polyfem::assembler
 		using Material = typename EnergyKernel::Material;
 		static constexpr int VALUE_DIM = EnergyKernel::VALUE_DIM;
 		static constexpr int DIM = EnergyKernel::DIM;
+		static constexpr bool SUPPORT_DEVICE_EVAL = EnergyKernel::SUPPORT_DEVICE_EVAL;
 
-		POLYFEM_BOTH static Eigen::Matrix<double, VALUE_DIM, 1> eval_vector(
+		EnergyKernel energy;
+
+		POLYFEM_BOTH Eigen::Matrix<double, VALUE_DIM, 1> eval_vector(
 			int elem_id,
 			int quad_id,
 			int local_i,
 			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
-			Span<const double> unknown)
+			Span<const double> unknown) const
 		{
 			using Vec1 = Eigen::Vector<double, VALUE_DIM>;
 			using Vec2 = Eigen::Vector<double, DIM>;
@@ -167,7 +172,7 @@ namespace polyfem::assembler
 
 			// Seed autodiff unknown vector u.
 			// If NEED_UNKNOWN_VALUE, autodiff_u is Eigen::Matrix<AD, VALUE_DIM, 1>. Else empty dummy type.
-			Conditional<NEED_UNKNOWN_VALUE, Eigen::Matrix<AD, VALUE_DIM, 1>, detail::Dummy> autodiff_u;
+			Conditional<NEED_UNKNOWN_VALUE, Eigen::Matrix<AD, VALUE_DIM, 1>, detail::NoStorage> autodiff_u;
 			if constexpr (NEED_UNKNOWN_VALUE)
 			{
 				for (int vd = 0; vd < VALUE_DIM; ++vd)
@@ -180,7 +185,7 @@ namespace polyfem::assembler
 
 			// Seed autodiff unknown gradient matrix gradu.
 			// If NEED_UNKNOWN_GRAD, autodiff_u is Eigen::Matrix<AD, VALUE_DIM, DIM>. Else empty dummy type.
-			Conditional<NEED_UNKNOWN_GRAD, Eigen::Matrix<AD, VALUE_DIM, DIM>, detail::Dummy> autodiff_gradu;
+			Conditional<NEED_UNKNOWN_GRAD, Eigen::Matrix<AD, VALUE_DIM, DIM>, detail::NoStorage> autodiff_gradu;
 			if constexpr (NEED_UNKNOWN_GRAD)
 			{
 				for (int vd = 0; vd < VALUE_DIM; ++vd)
@@ -205,9 +210,9 @@ namespace polyfem::assembler
 				gradu = Span<const AD>(autodiff_gradu.data(), autodiff_gradu.size());
 			}
 
-			AD energy = EnergyKernel::template eval_scalar<AD>(u, gradu, material);
+			AD energy_value = energy.template eval_scalar<AD>(u, gradu, material);
 
-			return energy.get_grad();
+			return energy_value.get_grad();
 		}
 	};
 
@@ -217,9 +222,13 @@ namespace polyfem::assembler
 		using Material = typename EnergyKernel::Material;
 		static constexpr int VALUE_DIM = EnergyKernel::VALUE_DIM;
 		static constexpr int DIM = EnergyKernel::DIM;
+		static constexpr bool SUPPORT_DEVICE_EVAL = EnergyKernel::SUPPORT_DEVICE_EVAL;
 
 		using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
-		POLYFEM_BOTH static Mat eval_matrix(
+
+		EnergyKernel energy;
+
+		POLYFEM_BOTH Mat eval_matrix(
 			int elem_id,
 			int quad_id,
 			int local_i,
@@ -227,7 +236,7 @@ namespace polyfem::assembler
 			const AssemblyEssentialsView &bases,
 			const ElementAssemblyCacheView &cache,
 			const Material &material,
-			Span<const double> unknown)
+			Span<const double> unknown) const
 		{
 			using Vec1 = Eigen::Vector<double, VALUE_DIM>;
 			using Vec2 = Eigen::Vector<double, DIM>;
@@ -271,7 +280,7 @@ namespace polyfem::assembler
 
 			// Seed autodiff unknown vector u.
 			// If NEED_UNKNOWN_VALUE, autodiff_u is Eigen::Matrix<AD, VALUE_DIM, 1>. Else empty dummy type.
-			Conditional<NEED_UNKNOWN_VALUE, Eigen::Matrix<AD, VALUE_DIM, 1>, detail::Dummy> autodiff_u;
+			Conditional<NEED_UNKNOWN_VALUE, Eigen::Matrix<AD, VALUE_DIM, 1>, detail::NoStorage> autodiff_u;
 			if constexpr (NEED_UNKNOWN_VALUE)
 			{
 				for (int vd = 0; vd < VALUE_DIM; ++vd)
@@ -285,7 +294,7 @@ namespace polyfem::assembler
 
 			// Seed autodiff unknown gradient matrix gradu.
 			// If NEED_UNKNOWN_GRAD, autodiff_u is Eigen::Matrix<AD, VALUE_DIM, DIM>. Else empty dummy type.
-			Conditional<NEED_UNKNOWN_GRAD, Eigen::Matrix<AD, VALUE_DIM, DIM>, detail::Dummy> autodiff_gradu;
+			Conditional<NEED_UNKNOWN_GRAD, Eigen::Matrix<AD, VALUE_DIM, DIM>, detail::NoStorage> autodiff_gradu;
 			if constexpr (NEED_UNKNOWN_GRAD)
 			{
 				for (int vd = 0; vd < VALUE_DIM; ++vd)
@@ -311,8 +320,8 @@ namespace polyfem::assembler
 				gradu = Span<const AD>(autodiff_gradu.data(), autodiff_gradu.size());
 			}
 
-			AD energy = EnergyKernel::template eval_scalar<AD>(u, gradu, material);
-			return energy.get_hess();
+			AD energy_value = energy.template eval_scalar<AD>(u, gradu, material);
+			return energy_value.get_hess();
 		}
 	};
 

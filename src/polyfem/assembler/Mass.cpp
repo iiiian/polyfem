@@ -24,9 +24,10 @@ namespace polyfem::assembler
 			using Material = material::Density<double>;
 			static constexpr int VALUE_DIM = value_dim;
 			static constexpr int DIM = dim;
+			static constexpr bool SUPPORT_DEVICE_EVAL = true;
 
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
-			POLYFEM_BOTH static Mat eval_matrix(
+			POLYFEM_BOTH Mat eval_matrix(
 				const int element_id,
 				const int quad_id,
 				const int bi,
@@ -34,7 +35,7 @@ namespace polyfem::assembler
 				const AssemblyEssentialsView &bases,
 				const ElementAssemblyCacheView &cache,
 				const Material &material,
-				Span<const double> unknown)
+				Span<const double> unknown) const
 			{
 				(void)element_id;
 				(void)quad_id;
@@ -113,13 +114,13 @@ namespace polyfem::assembler
 			switch (size())
 			{
 			case 1:
-				assemble_matrix<MassMatrixKernel<1, 1>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<1, 1>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			case 2:
-				assemble_matrix<MassMatrixKernel<2, 1>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<2, 1>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			case 3:
-				assemble_matrix<MassMatrixKernel<3, 1>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<3, 1>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			default:
 				log_and_throw_error("Unsupported NG mass value dimension {}.", size());
@@ -129,13 +130,13 @@ namespace polyfem::assembler
 			switch (size())
 			{
 			case 1:
-				assemble_matrix<MassMatrixKernel<1, 2>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<1, 2>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			case 2:
-				assemble_matrix<MassMatrixKernel<2, 2>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<2, 2>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			case 3:
-				assemble_matrix<MassMatrixKernel<3, 2>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<3, 2>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			default:
 				log_and_throw_error("Unsupported NG mass value dimension {}.", size());
@@ -145,13 +146,13 @@ namespace polyfem::assembler
 			switch (size())
 			{
 			case 1:
-				assemble_matrix<MassMatrixKernel<1, 3>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<1, 3>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			case 2:
-				assemble_matrix<MassMatrixKernel<2, 3>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<2, 3>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			case 3:
-				assemble_matrix<MassMatrixKernel<3, 3>>(bases, geom_bases, cache, materials, Span<const double>{}, hessian, false, t, scale, true, policy);
+				assemble_matrix(MassMatrixKernel<3, 3>{}, bases, geom_bases, cache, materials, {}, hessian, false, t, scale, true, policy);
 				break;
 			default:
 				log_and_throw_error("Unsupported NG mass value dimension {}.", size());

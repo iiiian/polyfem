@@ -61,12 +61,12 @@ namespace polyfem::assembler
 		case 2:
 		{
 			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<2>>;
-			return assemble_scalar<Kernel>(bases, geom_bases, cache, materials, x, t, policy);
+			return assemble_scalar(Kernel{}, bases, geom_bases, cache, materials, x, t, policy);
 		}
 		case 3:
 		{
 			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<3>>;
-			return assemble_scalar<Kernel>(bases, geom_bases, cache, materials, x, t, policy);
+			return assemble_scalar(Kernel{}, bases, geom_bases, cache, materials, x, t, policy);
 		}
 		default:
 			log_and_throw_error("Unsupported NG NeoHookean dimension {}.", size());
@@ -97,13 +97,13 @@ namespace polyfem::assembler
 		case 2:
 		{
 			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<2>>;
-			assemble_scalar_per_element<Kernel>(bases, geom_bases, cache, materials, x, energy, t, policy);
+			assemble_scalar_per_element(Kernel{}, bases, geom_bases, cache, materials, x, energy, t, policy);
 			break;
 		}
 		case 3:
 		{
 			using Kernel = AutoDiffScalarKernel<NeoHookeanEnergy<3>>;
-			assemble_scalar_per_element<Kernel>(bases, geom_bases, cache, materials, x, energy, t, policy);
+			assemble_scalar_per_element(Kernel{}, bases, geom_bases, cache, materials, x, energy, t, policy);
 			break;
 		}
 		default:
@@ -138,13 +138,13 @@ namespace polyfem::assembler
 		case 2:
 		{
 			using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<2>>;
-			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale, policy);
+			assemble_vector(Kernel{}, bases, geom_bases, cache, materials, x, grad, t, scale, policy);
 			break;
 		}
 		case 3:
 		{
 			using Kernel = AutoDiffGradientVectorKernel<NeoHookeanEnergy<3>>;
-			assemble_vector<Kernel>(bases, geom_bases, cache, materials, x, grad, t, scale, policy);
+			assemble_vector(Kernel{}, bases, geom_bases, cache, materials, x, grad, t, scale, policy);
 			break;
 		}
 		default:
@@ -181,16 +181,16 @@ namespace polyfem::assembler
 		case 2:
 		{
 			using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<2>>;
-			assemble_matrix<Kernel>(
-				bases, geom_bases, cache, materials, x,
+			assemble_matrix(
+				Kernel{}, bases, geom_bases, cache, materials, x,
 				hessian, project_to_psd, t, scale, false, policy);
 			break;
 		}
 		case 3:
 		{
 			using Kernel = AutoDiffHessianMatrixKernel<NeoHookeanEnergy<3>>;
-			assemble_matrix<Kernel>(
-				bases, geom_bases, cache, materials, x,
+			assemble_matrix(
+				Kernel{}, bases, geom_bases, cache, materials, x,
 				hessian, project_to_psd, t, scale, false, policy);
 			break;
 		}

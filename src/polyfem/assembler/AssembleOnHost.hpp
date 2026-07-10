@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <vector>
 #include <typeinfo>
+#include <type_traits>
 #include <spdlog/fmt/fmt.h>
 
 namespace polyfem::assembler
@@ -41,27 +42,34 @@ namespace polyfem::assembler
 			int quad_id,
 			double time)
 		{
-			auto material_expr = material_registry.template get<typename Material::ExprType>(element_id);
-			if (material_expr == nullptr)
+			if constexpr (std::is_same_v<Material, material::Dummy<double>>)
 			{
-				auto err_string =
-					fmt::format("Material {} missing for element {}. Please check your volume selection id in material json.",
-								typeid(material_expr).name(), element_id);
-				throw std::runtime_error(err_string);
+				return {};
 			}
+			else
+			{
+				auto material_expr = material_registry.template get<typename Material::ExprType>(element_id);
+				if (material_expr == nullptr)
+				{
+					auto err_string =
+						fmt::format("Material {} missing for element {}. Please check your volume selection id in material json.",
+									typeid(material_expr).name(), element_id);
+					throw std::runtime_error(err_string);
+				}
 
-			double x = cache.get_physical_x(quad_id);
-			double y = 0.0;
-			double z = 0.0;
-			if constexpr (dim > 1)
-			{
-				y = cache.get_physical_y(quad_id);
+				double x = cache.get_physical_x(quad_id);
+				double y = 0.0;
+				double z = 0.0;
+				if constexpr (dim > 1)
+				{
+					y = cache.get_physical_y(quad_id);
+				}
+				if constexpr (dim > 2)
+				{
+					z = cache.get_physical_z(quad_id);
+				}
+				return material_expr->eval_expr(x, y, z, time, element_id);
 			}
-			if constexpr (dim > 2)
-			{
-				z = cache.get_physical_z(quad_id);
-			}
-			return material_expr->eval_expr(x, y, z, time, element_id);
 		}
 
 		void scatter_element_vector(
@@ -84,6 +92,7 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	double assemble_scalar_on_host(
+		ScalarKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -140,6 +149,7 @@ namespace polyfem::assembler
 
 	template <typename ScalarKernel>
 	void assemble_scalar_per_element_on_host(
+		ScalarKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -187,6 +197,7 @@ namespace polyfem::assembler
 
 	template <typename VectorKernel>
 	void assemble_vector_on_host(
+		VectorKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
@@ -278,6 +289,7 @@ namespace polyfem::assembler
 
 	template <typename MatrixKernel>
 	void assemble_matrix_on_host(
+		MatrixKernel kernel,
 		const AssemblyEssentials &bases,
 		const AssemblyEssentials &geom_bases,
 		const AssemblyCache &cache,
