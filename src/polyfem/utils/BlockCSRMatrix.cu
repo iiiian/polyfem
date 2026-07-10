@@ -398,45 +398,39 @@ namespace polyfem
 			sorted_values_buf.destroy();
 
 			// ---------------------------------------------------------------------------
-			// Download CSC to host and construct Eigen sparse matrix.
+			// Allocate Eigen-owned CSC storage, then download directly into it.
 			// ---------------------------------------------------------------------------
 
-			std::vector<int> h_col_ptr(bsr.cols + 1);
-			std::vector<int> h_row_idx(unique_nnz);
-			std::vector<double> h_values(unique_nnz);
+			static_assert(std::is_same_v<int, StiffnessMatrix::StorageIndex>, "NG assembly path does not support large index.");
+			StiffnessMatrix out(bsr.rows, bsr.cols);
+			out.resizeNonZeros(unique_nnz);
+
 			cudaMemcpyAsync(
-				h_col_ptr.data(),
+				out.outerIndexPtr(),
 				csc_col_ptr.data(),
-				static_cast<size_t>(bsr.cols + 1) * sizeof(int),
+				static_cast<size_t>(bsr.cols + 1) * sizeof(StiffnessMatrix::StorageIndex),
 				cudaMemcpyDeviceToHost,
 				stream);
 			cudaMemcpyAsync(
-				h_row_idx.data(),
+				out.innerIndexPtr(),
 				csc_rows.data(),
-				static_cast<size_t>(unique_nnz) * sizeof(int),
+				static_cast<size_t>(unique_nnz) * sizeof(StiffnessMatrix::StorageIndex),
 				cudaMemcpyDeviceToHost,
 				stream);
 			cudaMemcpyAsync(
-				h_values.data(),
+				out.valuePtr(),
 				csc_vals.data(),
 				static_cast<size_t>(unique_nnz) * sizeof(double),
 				cudaMemcpyDeviceToHost,
 				stream);
+
 			csc_col_ptr.destroy();
 			csc_rows.destroy();
 			csc_vals.destroy();
 
 			policy.stream->sync();
 
-			static_assert(std::is_same_v<int, StiffnessMatrix::StorageIndex>, "NG assembly path does not support large index.");
-			Eigen::Map<const StiffnessMatrix> mapped(
-				bsr.rows,
-				bsr.cols,
-				h_values.size(),
-				h_col_ptr.data(),
-				h_row_idx.data(),
-				h_values.data());
-			return mapped;
+			return out;
 		}
 
 	} // namespace
