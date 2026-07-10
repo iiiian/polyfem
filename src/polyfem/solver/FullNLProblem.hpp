@@ -17,7 +17,7 @@ namespace polyfem::solver
 	class FullNLProblem : public polysolve::nonlinear::Problem
 	{
 	public:
-		FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms, ExecutionPolicy policy);
+		FullNLProblem(const std::vector<std::shared_ptr<Form>> &forms, ExecutionPolicy policy = {});
 		virtual ~FullNLProblem() = default;
 		virtual void init(const TVector &x0) override;
 
