@@ -43,6 +43,23 @@ namespace polyfem::assembler
 		[[deprecated]] Span<const LocalNodeFromPrimitiveFunc> legacy_local_nodes_from_primitive;
 	};
 
+#ifdef POLYFEM_WITH_CUDA
+	/// @brief Device task info per CUDA thread for vector assembly.
+	struct DeviceVectorAssemblyTask
+	{
+		int elem_id;
+		int basis_i;
+	};
+
+	/// @brief Device task info per CUDA thread for matrix assembly.
+	struct DeviceMatrixAssemblyTask
+	{
+		int elem_id;
+		int basis_i;
+		int basis_j;
+	};
+#endif
+
 	class AssemblyEssentials
 	{
 	public:
@@ -61,6 +78,8 @@ namespace polyfem::assembler
 	private:
 #ifdef POLYFEM_WITH_CUDA
 		mutable DeviceBuf<ElementDesc> d_element_desc_;
+		mutable DeviceBuf<DeviceVectorAssemblyTask> d_vector_assembly_tasks_;
+		mutable DeviceBuf<DeviceMatrixAssemblyTask> d_matrix_assembly_tasks_;
 #endif
 		mutable std::shared_ptr<std::vector<basis::ElementBases>> legacy_bases_;
 
@@ -91,6 +110,12 @@ namespace polyfem::assembler
 #ifdef POLYFEM_WITH_CUDA
 		/// Return view on device memory. Lazily sync data.
 		AssemblyEssentialsView device_view(ExecutionPolicy policy) const;
+
+		/// Return cached vector assembly tasks on device memory.
+		Span<const DeviceVectorAssemblyTask> device_vector_assembly_tasks(ExecutionPolicy policy) const;
+
+		/// Return cached matrix assembly tasks on device memory.
+		Span<const DeviceMatrixAssemblyTask> device_matrix_assembly_tasks(ExecutionPolicy policy) const;
 
 		/// Release device storage.
 		void clear_device_storage();

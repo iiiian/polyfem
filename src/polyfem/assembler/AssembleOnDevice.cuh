@@ -23,78 +23,6 @@ namespace polyfem::assembler
 {
 	namespace detail
 	{
-
-		inline POLYFEM_BOTH int upper_mat_size(int dim)
-		{
-			return dim * (dim + 1) / 2;
-		}
-
-		/// @brief Task info per CUDA thread.
-		///
-		/// In vector assembly, each thread computes element basis i contribution.
-		struct VectorAssemblyTask
-		{
-			int elem_id;
-			int basis_i;
-		};
-
-		/// @brief Task info per CUDA thread.
-		///
-		/// In matrix assembly, each thread computes element basis i x basis j contribution.
-		struct MatrixAssemblyTask
-		{
-			int elem_id;
-			int basis_i;
-			int basis_j;
-		};
-
-		inline std::vector<VectorAssemblyTask> build_vector_tasks(const AssemblyEssentials &bases)
-		{
-			int task_num = 0;
-			for (const ElementDesc &elem_desc : bases.element_desc)
-			{
-				task_num += elem_desc.basis_desc.basis_num;
-			}
-
-			std::vector<VectorAssemblyTask> tasks;
-			tasks.reserve(task_num);
-			for (int elem_id = 0; elem_id < bases.element_desc.size(); ++elem_id)
-			{
-				int basis_num = bases.element_desc[elem_id].basis_desc.basis_num;
-				for (int bi = 0; bi < basis_num; ++bi)
-				{
-					tasks.push_back({elem_id, bi});
-				}
-			}
-
-			return tasks;
-		}
-
-		inline std::vector<MatrixAssemblyTask> build_matrix_tasks(const AssemblyEssentials &bases)
-		{
-			int task_num = 0;
-			for (const ElementDesc &elem_desc : bases.element_desc)
-			{
-				task_num += upper_mat_size(elem_desc.basis_desc.basis_num);
-			}
-
-			std::vector<MatrixAssemblyTask> tasks;
-			tasks.reserve(task_num);
-			for (int elem_id = 0; elem_id < bases.element_desc.size(); ++elem_id)
-			{
-				int basis_num = bases.element_desc[elem_id].basis_desc.basis_num;
-				for (int bi = 0; bi < basis_num; ++bi)
-				{
-					for (int bj = bi; bj < basis_num; ++bj)
-					{
-						tasks.push_back({elem_id, bi, bj});
-					}
-				}
-			}
-
-			return tasks;
-		}
-
 		template <int VALUE_DIM>
 		__device__ void scatter_mat_ij(
 			int elem_id,
@@ -257,7 +185,7 @@ namespace polyfem::assembler
 		__global__ void assemble_vector_kernel(
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
-			Span<const VectorAssemblyTask> tasks,
+			Span<const DeviceVectorAssemblyTask> tasks,
 			Span<const typename VectorKernel::Material> materials,
 			Span<const double> unknown,
 			Span<double> vec_out,
@@ -275,7 +203,7 @@ namespace polyfem::assembler
 				return;
 			}
 
-			VectorAssemblyTask task = tasks[task_id];
+			DeviceVectorAssemblyTask task = tasks[task_id];
 			int elem_id = task.elem_id;
 			int basis_id = task.basis_i;
 			auto &cache_desc = cache.desc[elem_id];
@@ -303,7 +231,7 @@ namespace polyfem::assembler
 		__global__ void assemble_matrix_kernel(
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
-			Span<const MatrixAssemblyTask> tasks,
+			Span<const DeviceMatrixAssemblyTask> tasks,
 			Span<const typename MatrixKernel::Material> materials,
 			Span<const double> unknown,
 			BSRMatrixMutableView mat_out,
@@ -320,7 +248,7 @@ namespace polyfem::assembler
 				return;
 			}
 
-			MatrixAssemblyTask task = tasks[task_id];
+			DeviceMatrixAssemblyTask task = tasks[task_id];
 			int elem_id = task.elem_id;
 			int bi = task.basis_i;
 			int bj = task.basis_j;
@@ -491,6 +419,9 @@ namespace polyfem::assembler
 	{
 		auto &p = policy;
 
+		auto d_vector_tasks = bases.device_vector_assembly_tasks(p);
+		int task_num = d_vector_tasks.size();
+
 		using Material = typename VectorKernel::Material;
 		constexpr int DIM = VectorKernel::DIM;
 
@@ -504,15 +435,6 @@ namespace polyfem::assembler
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, time, policy);
 		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(*p.stream, unknown, d_unknown);
-		auto vector_tasks = detail::build_vector_tasks(bases);
-		int task_num = static_cast<int>(vector_tasks.size());
-		assert(static_cast<std::size_t>(task_num) == vector_tasks.size());
-		auto d_vector_tasks = cuda::make_buffer<detail::VectorAssemblyTask>(
-			*p.stream,
-			*p.mr,
-			vector_tasks.size(),
-			cuda::no_init);
-		cuda::copy_bytes(*p.stream, vector_tasks, d_vector_tasks);
 
 		int grid_num = div_round_up(task_num, 128);
 		detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream->get()>>>(
@@ -539,6 +461,9 @@ namespace polyfem::assembler
 	{
 		auto &p = policy;
 
+		auto d_matrix_tasks = bases.device_matrix_assembly_tasks(p);
+		int task_num = d_matrix_tasks.size();
+
 		using Material = typename MatrixKernel::Material;
 		constexpr int DIM = MatrixKernel::DIM;
 
@@ -552,15 +477,6 @@ namespace polyfem::assembler
 		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, time, policy);
 		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
 		cuda::copy_bytes(*p.stream, unknown, d_unknown);
-		auto matrix_tasks = detail::build_matrix_tasks(bases);
-		int task_num = static_cast<int>(matrix_tasks.size());
-		assert(static_cast<std::size_t>(task_num) == matrix_tasks.size());
-		auto d_matrix_tasks = cuda::make_buffer<detail::MatrixAssemblyTask>(
-			*p.stream,
-			*p.mr,
-			matrix_tasks.size(),
-			cuda::no_init);
-		cuda::copy_bytes(*p.stream, matrix_tasks, d_matrix_tasks);
 
 		int grid_num = div_round_up(task_num, 128);
 		detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream->get()>>>(

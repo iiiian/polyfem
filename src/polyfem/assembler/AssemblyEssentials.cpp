@@ -135,6 +135,58 @@ namespace polyfem::assembler
 				   && desc.dof_mapping_range;
 		}
 
+#ifdef POLYFEM_WITH_CUDA
+		std::vector<DeviceVectorAssemblyTask> build_device_vector_assembly_tasks(
+			const std::vector<ElementDesc> &element_desc)
+		{
+			int task_num = 0;
+			for (const ElementDesc &elem_desc : element_desc)
+			{
+				task_num += elem_desc.basis_desc.basis_num;
+			}
+
+			std::vector<DeviceVectorAssemblyTask> tasks;
+			tasks.reserve(task_num);
+			for (int elem_id = 0; elem_id < int(element_desc.size()); ++elem_id)
+			{
+				const int basis_num = element_desc[elem_id].basis_desc.basis_num;
+				for (int bi = 0; bi < basis_num; ++bi)
+				{
+					tasks.push_back({elem_id, bi});
+				}
+			}
+
+			return tasks;
+		}
+
+		std::vector<DeviceMatrixAssemblyTask> build_device_matrix_assembly_tasks(
+			const std::vector<ElementDesc> &element_desc)
+		{
+			int task_num = 0;
+			for (const ElementDesc &elem_desc : element_desc)
+			{
+				const int basis_num = elem_desc.basis_desc.basis_num;
+				task_num += basis_num * (basis_num + 1) / 2;
+			}
+
+			std::vector<DeviceMatrixAssemblyTask> tasks;
+			tasks.reserve(task_num);
+			for (int elem_id = 0; elem_id < int(element_desc.size()); ++elem_id)
+			{
+				const int basis_num = element_desc[elem_id].basis_desc.basis_num;
+				for (int bi = 0; bi < basis_num; ++bi)
+				{
+					for (int bj = bi; bj < basis_num; ++bj)
+					{
+						tasks.push_back({elem_id, bi, bj});
+					}
+				}
+			}
+
+			return tasks;
+		}
+#endif
+
 		basis::BasisEvalCallback make_legacy_eval_callback(
 			const basis::ElementBases &legacy_element,
 			const int dim)
@@ -358,10 +410,46 @@ namespace polyfem::assembler
 			{}};
 	}
 
+	Span<const DeviceVectorAssemblyTask> AssemblyEssentials::device_vector_assembly_tasks(ExecutionPolicy policy) const
+	{
+		if (!d_vector_assembly_tasks_)
+		{
+			std::vector<DeviceVectorAssemblyTask> tasks = build_device_vector_assembly_tasks(element_desc);
+			d_vector_assembly_tasks_ = cuda::make_buffer<DeviceVectorAssemblyTask>(
+				*policy.stream,
+				*policy.mr,
+				tasks.size(),
+				cuda::no_init);
+			cuda::copy_bytes(*policy.stream, tasks, *d_vector_assembly_tasks_);
+			policy.stream->sync();
+		}
+
+		return *d_vector_assembly_tasks_;
+	}
+
+	Span<const DeviceMatrixAssemblyTask> AssemblyEssentials::device_matrix_assembly_tasks(ExecutionPolicy policy) const
+	{
+		if (!d_matrix_assembly_tasks_)
+		{
+			std::vector<DeviceMatrixAssemblyTask> tasks = build_device_matrix_assembly_tasks(element_desc);
+			d_matrix_assembly_tasks_ = cuda::make_buffer<DeviceMatrixAssemblyTask>(
+				*policy.stream,
+				*policy.mr,
+				tasks.size(),
+				cuda::no_init);
+			cuda::copy_bytes(*policy.stream, tasks, *d_matrix_assembly_tasks_);
+			policy.stream->sync();
+		}
+
+		return *d_matrix_assembly_tasks_;
+	}
+
 	void AssemblyEssentials::clear_device_storage()
 	{
 		need_host_device_sync_ = true;
 		d_element_desc_ = {};
+		d_vector_assembly_tasks_ = {};
+		d_matrix_assembly_tasks_ = {};
 		quadrature_store.clear_device_storage();
 		mass_quadrature_store.clear_device_storage();
 		basis_store.clear_device_storage();
