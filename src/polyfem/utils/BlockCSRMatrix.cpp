@@ -166,7 +166,7 @@ namespace polyfem
 #ifdef POLYFEM_WITH_CUDA
 		if (policy.mode == ExecutionMode::Hybrid && has_allocate_device_value())
 		{
-			to_stiffness_matrix_device(policy);
+			return to_stiffness_matrix_device(policy);
 		}
 #else
 		(void)policy;
