@@ -239,9 +239,8 @@ namespace polyfem::varform
 			pure_mass_ass_vals_cache_.init_empty(true);
 		}
 
-		// If hybrid assembly is enabled and NG assembly essential data is populated,
-		// compute NG assembly cache.
-		if (execution_policy_.mode == ExecutionMode::Hybrid && space_.assembly_essentials && space_.geometry->assembly_essentials)
+		// IF NG assembly essential data is populated, compute NG assembly cache.
+		if (space_.assembly_essentials && space_.geometry->assembly_essentials)
 		{
 			ng_ass_cache_ = assembler::compute_assembly_cache_batched(
 				space_.assembly_essentials->view(),
