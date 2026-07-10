@@ -29,6 +29,7 @@
 #include <polyfem/utils/Logger.hpp>
 #include <polyfem/utils/StringUtils.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <limits>
 
@@ -270,6 +271,7 @@ namespace polyfem::varform
 		// FIXME check subclasses
 		stats.reset();
 		timings = io::OutRuntimeData();
+		io_timings.clear();
 		output_sampler_initialized_ = false;
 		prepared_ = false;
 		problem = nullptr;
@@ -655,6 +657,7 @@ namespace polyfem::varform
 	{
 		prepare();
 		solve_problem(sol);
+		log_io_timing_summary();
 	}
 
 	void VarForm::build_node_mapping(
@@ -813,6 +816,8 @@ namespace polyfem::varform
 
 	void VarForm::save_json(const Eigen::MatrixXd &solution) const
 	{
+		utils::Timer timer(io_timings["io/save_json"]);
+
 		const std::string out_path = resolve_output_path(args["output"]["json"]);
 		if (out_path.empty())
 			return;
@@ -824,6 +829,31 @@ namespace polyfem::varform
 			return;
 		}
 		save_json(solution, file);
+		log_io_timing_summary();
+	}
+
+	void VarForm::log_io_timing_summary() const
+	{
+		if (!logger().should_log(spdlog::level::debug) || io_timings.empty())
+			return;
+
+		std::vector<std::pair<std::string, utils::Timing>> sorted_timings(io_timings.begin(), io_timings.end());
+		std::sort(sorted_timings.begin(), sorted_timings.end(), [](const auto &a, const auto &b) {
+			return a.second.time > b.second.time;
+		});
+
+		double total_time = 0;
+		for (const auto &[_, timing] : sorted_timings)
+			total_time += timing.time;
+
+		logger().debug("VarForm IO timing summary: {:.6g}s accumulated over {} entries", total_time, sorted_timings.size());
+		for (const auto &[name, timing] : sorted_timings)
+		{
+			const double percent = total_time > 0 ? 100 * timing.time / total_time : 0;
+			const double average = timing.count > 0 ? timing.time / double(timing.count) : 0;
+			logger().debug("{:48s}: {:10.6g}s {:5.1f}% ({:6} calls, avg {:10.6g}s)",
+						   name, timing.time, percent, timing.count, average);
+		}
 	}
 
 	void VarForm::set_materials(assembler::Assembler &assembler, const int size) const
@@ -846,6 +876,7 @@ namespace polyfem::varform
 		if (output_sampler_initialized_)
 			return;
 
+		utils::Timer timer(io_timings["io/output_sampler"]);
 		const io::OutputSpace space = output_space();
 		if (space.mesh)
 		{
@@ -908,6 +939,8 @@ namespace polyfem::varform
 		const time_integrator::ImplicitTimeIntegrator *time_integrator,
 		const bool rest_mesh_written) const
 	{
+		utils::Timer timer(io_timings["io/save_step_state"]);
+
 		const int global_t = output_file_index(t);
 		const std::string state_path = resolve_output_path(fmt::format(args["output"]["data"]["state"], global_t));
 		if (!state_path.empty() && time_integrator)
@@ -930,15 +963,21 @@ namespace polyfem::varform
 		logger().trace("Saving VTU...");
 		const std::string step_name = args["output"]["advanced"]["timestep_prefix"];
 		const auto opts = export_options(space);
-		output_geometry_.save_vtu(
-			resolve_output_path(fmt::format(step_name + "{:d}.vtu", global_t)),
-			space, output_field_function(solution, opts), time, dt,
-			opts);
+		{
+			utils::Timer timer(io_timings["io/save_vtu"]);
+			output_geometry_.save_vtu(
+				resolve_output_path(fmt::format(step_name + "{:d}.vtu", global_t)),
+				space, output_field_function(solution, opts), time, dt,
+				opts);
+		}
 
-		output_geometry_.save_pvd(
-			resolve_output_path(args["output"]["paraview"]["file_name"]),
-			[step_name](int i) { return fmt::format(step_name + "{:d}.vtm", i); },
-			global_t, t0, dt, args["output"]["paraview"]["skip_frame"].get<int>());
+		{
+			utils::Timer timer(io_timings["io/save_pvd"]);
+			output_geometry_.save_pvd(
+				resolve_output_path(args["output"]["paraview"]["file_name"]),
+				[step_name](int i) { return fmt::format(step_name + "{:d}.vtm", i); },
+				global_t, t0, dt, args["output"]["paraview"]["skip_frame"].get<int>());
+		}
 	}
 
 	void VarForm::save_subsolve(const int i, const int t, const Eigen::MatrixXd &solution) const
@@ -954,6 +993,7 @@ namespace polyfem::varform
 
 		ensure_output_sampler();
 		const auto opts = export_options(space);
+		utils::Timer timer(io_timings["io/save_subsolve_vtu"]);
 		output_geometry_.save_vtu(
 			resolve_output_path(fmt::format("solve_{:d}.vtu", i)),
 			space, output_field_function(solution, opts), t, dt,

@@ -13,6 +13,7 @@
 #include <polyfem/io/OutData.hpp>
 #include <polyfem/io/OutStatsData.hpp>
 #include <polyfem/utils/ExecutionPolicy.hpp>
+#include <polyfem/utils/Timer.hpp>
 #include <polyfem/utils/Types.hpp>
 #include <polyfem/varforms/FESpace.hpp>
 
@@ -113,6 +114,7 @@ namespace polyfem
 			/// @param solution
 			void save_json(const Eigen::MatrixXd &solution) const;
 			virtual void export_data(const Eigen::MatrixXd &solution) const = 0;
+			void log_io_timing_summary() const;
 
 		protected:
 			std::string resolve_output_path(const std::string &path) const;
@@ -198,6 +200,7 @@ namespace polyfem
 
 			/// runtime statistics
 			io::OutRuntimeData timings;
+			mutable std::unordered_map<std::string, utils::Timing> io_timings;
 
 			std::string root_path;
 			std::string output_path;
