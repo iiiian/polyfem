@@ -1,7 +1,7 @@
 #pragma once
 
 #include <polyfem/materials/LameParameter.hpp>
-#include <polyfem/materials/Materials.hpp>
+#include <polyfem/materials/NeoHookean.hpp>
 #include <polyfem/utils/AutoDiff.hpp>
 #include <polyfem/utils/CudaBoth.hpp>
 #include <polyfem/utils/Span.hpp>
@@ -15,7 +15,7 @@ namespace polyfem::assembler
 	template <int dim>
 	struct NeoHookeanEnergy
 	{
-		using Material = polyfem::material::NeoHookean<double>;
+		using Material = polyfem::material::NeoHookean;
 		static constexpr int VALUE_DIM = dim;
 		static constexpr int DIM = dim;
 		static constexpr bool NEED_UNKNOWN_VALUE = false;

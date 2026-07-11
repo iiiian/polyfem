@@ -301,7 +301,7 @@ namespace polyfem::assembler
 			int elem_num = bases.element_desc.size();
 			assert(elem_num != 0);
 
-			if constexpr (std::is_same_v<Material, material::Dummy<double>>)
+			if constexpr (std::is_same_v<Material, material::Dummy>)
 			{
 				auto d_materials =
 					cuda::make_buffer<Material>(*policy.stream, *policy.mr, 0, cuda::no_init);

@@ -1,0 +1,31 @@
+#include <polyfem/materials/HGOFiber.hpp>
+#include <polyfem/materials/MaterialUtils.hpp>
+
+namespace polyfem::material
+{
+	template <int dim>
+	HGOFiberExpr<dim> HGOFiberExpr<dim>::from_json(const json &j, const Units &units, const std::string &root_path)
+	{
+		const std::string stress = units.stress();
+		HGOFiberExpr<dim> out;
+		out.k1 = parse_expr(j.at("k1"), stress, root_path);
+		out.k2 = parse_expr(j.at("k2"), "", root_path);
+		out.fiber_direction = j.contains("fiber_direction")
+								  ? FiberDirection<utils::ExpressionValue, dim>::from_json(j.at("fiber_direction"), units, root_path)
+								  : FiberDirection<utils::ExpressionValue, dim>::from_json(json::array(), units, root_path);
+		return out;
+	}
+
+	template <int dim>
+	HGOFiber<dim> HGOFiberExpr<dim>::eval_expr(double x, double y, double z, double t, int element_id) const
+	{
+		HGOFiber<dim> out{};
+		out.k1 = k1(x, y, z, t, element_id);
+		out.k2 = k2(x, y, z, t, element_id);
+		out.fiber_direction = fiber_direction.eval_expr(x, y, z, t, element_id);
+		return out;
+	}
+	template struct HGOFiberExpr<1>;
+	template struct HGOFiberExpr<2>;
+	template struct HGOFiberExpr<3>;
+} // namespace polyfem::material

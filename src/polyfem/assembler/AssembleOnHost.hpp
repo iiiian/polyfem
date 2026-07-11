@@ -42,7 +42,7 @@ namespace polyfem::assembler
 			int quad_id,
 			double time)
 		{
-			if constexpr (std::is_same_v<Material, material::Dummy<double>>)
+			if constexpr (std::is_same_v<Material, material::Dummy>)
 			{
 				return {};
 			}
@@ -131,7 +131,7 @@ namespace polyfem::assembler
 				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 				{
 					Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
-					double val = ScalarKernel::eval_scalar(elem_id, quad_id, bases_view, elem_cache, material, unknown);
+					double val = kernel.eval_scalar(elem_id, quad_id, bases_view, elem_cache, material, unknown);
 					local_scalar += val * elem_cache.get_weighted_measure(quad_id);
 				}
 			}
@@ -187,7 +187,7 @@ namespace polyfem::assembler
 				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 				{
 					Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
-					double val = ScalarKernel::eval_scalar(elem_id, quad_id, bases_view, elem_cache, material, unknown);
+					double val = kernel.eval_scalar(elem_id, quad_id, bases_view, elem_cache, material, unknown);
 					local_scalar += val * elem_cache.get_weighted_measure(quad_id);
 				}
 				scalar_out[elem_id] += local_scalar;
@@ -248,7 +248,7 @@ namespace polyfem::assembler
 					for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 					{
 						Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
-						Vec kernel_out = VectorKernel::eval_vector(
+						Vec kernel_out = kernel.eval_vector(
 							elem_id,
 							quad_id,
 							basis_id,
@@ -347,7 +347,7 @@ namespace polyfem::assembler
 						for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 						{
 							Material material = detail::eval_material<Material, DIM>(material_registry, elem_cache, elem_id, quad_id, time);
-							Mat kernel_out = MatrixKernel::eval_matrix(
+							Mat kernel_out = kernel.eval_matrix(
 								elem_id,
 								quad_id,
 								bi,

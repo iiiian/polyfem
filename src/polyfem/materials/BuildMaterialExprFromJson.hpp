@@ -2,7 +2,6 @@
 
 #include <polyfem/Units.hpp>
 #include <polyfem/materials/MaterialExprRegistry.hpp>
-#include <polyfem/materials/Materials.hpp>
 #include <polyfem/utils/ExpressionValue.hpp>
 
 #include <nlohmann/json.hpp>
