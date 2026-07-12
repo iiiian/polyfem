@@ -8,9 +8,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include <numeric>
 #include <string>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace polyfem::material
 {
@@ -18,7 +20,7 @@ namespace polyfem::material
 	{
 		// Dispatch from_json factory for a single material type.
 		void dispatch_from_json(
-			int e, // element id
+			Span<const int> elements,
 			const json &material,
 			int dim, // mesh dim
 			const Units &units,
@@ -33,85 +35,113 @@ namespace polyfem::material
 				log_and_throw_error("Nested MaterialSum is not supported!");
 			}
 			else if (type == "LinearElasticity")
-				registry.set(e, LinearElasticityExpr::from_json(material, units, root_path));
+				registry.set(elements, LinearElasticityExpr::from_json(material, units, root_path));
 			else if (type == "HookeLinearElasticity")
 			{
 				if (dim == 1)
-					registry.set(e, HookeLinearElasticityExpr<1>::from_json(material, units, root_path));
+					registry.set(elements, HookeLinearElasticityExpr<1>::from_json(material, units, root_path));
 				else if (dim == 2)
-					registry.set(e, HookeLinearElasticityExpr<2>::from_json(material, units, root_path));
+					registry.set(elements, HookeLinearElasticityExpr<2>::from_json(material, units, root_path));
 				else if (dim == 3)
-					registry.set(e, HookeLinearElasticityExpr<3>::from_json(material, units, root_path));
+					registry.set(elements, HookeLinearElasticityExpr<3>::from_json(material, units, root_path));
 				else
 					log_and_throw_error("Unsupported dimension {} for HookeLinearElasticity", dim);
 			}
 			else if (type == "SaintVenant")
 			{
 				if (dim == 1)
-					registry.set(e, SaintVenantExpr<1>::from_json(material, units, root_path));
+					registry.set(elements, SaintVenantExpr<1>::from_json(material, units, root_path));
 				else if (dim == 2)
-					registry.set(e, SaintVenantExpr<2>::from_json(material, units, root_path));
+					registry.set(elements, SaintVenantExpr<2>::from_json(material, units, root_path));
 				else if (dim == 3)
-					registry.set(e, SaintVenantExpr<3>::from_json(material, units, root_path));
+					registry.set(elements, SaintVenantExpr<3>::from_json(material, units, root_path));
 				else
 					log_and_throw_error("Unsupported dimension {} for SaintVenant", dim);
 			}
 			else if (type == "NeoHookean")
-				registry.set(e, NeoHookeanExpr::from_json(material, units, root_path));
+				registry.set(elements, NeoHookeanExpr::from_json(material, units, root_path));
 			else if (type == "IsochoricNeoHookean")
-				registry.set(e, IsochoricNeoHookeanExpr::from_json(material, units, root_path));
+				registry.set(elements, IsochoricNeoHookeanExpr::from_json(material, units, root_path));
 			else if (type == "IncompressibleLinearElasticity")
-				registry.set(e, IncompressibleLinearElasticityExpr::from_json(material, units, root_path));
+				registry.set(elements, IncompressibleLinearElasticityExpr::from_json(material, units, root_path));
 			else if (type == "FixedCorotational")
-				registry.set(e, FixedCorotationalExpr::from_json(material, units, root_path));
+				registry.set(elements, FixedCorotationalExpr::from_json(material, units, root_path));
 			else if (type == "MooneyRivlin")
-				registry.set(e, MooneyRivlinExpr::from_json(material, units, root_path));
+				registry.set(elements, MooneyRivlinExpr::from_json(material, units, root_path));
 			else if (type == "MooneyRivlin3Param")
-				registry.set(e, MooneyRivlin3ParamExpr::from_json(material, units, root_path));
+				registry.set(elements, MooneyRivlin3ParamExpr::from_json(material, units, root_path));
 			else if (type == "MooneyRivlin3ParamSymbolic")
-				registry.set(e, MooneyRivlin3ParamSymbolicExpr::from_json(material, units, root_path));
+				registry.set(elements, MooneyRivlin3ParamSymbolicExpr::from_json(material, units, root_path));
 			else if (type == "UnconstrainedOgden")
-				registry.set(e, UnconstrainedOgdenExpr::from_json(material, units, root_path));
+				registry.set(elements, UnconstrainedOgdenExpr::from_json(material, units, root_path));
 			else if (type == "IncompressibleOgden")
-				registry.set(e, IncompressibleOgdenExpr::from_json(material, units, root_path));
+				registry.set(elements, IncompressibleOgdenExpr::from_json(material, units, root_path));
 			else if (type == "Stokes")
-				registry.set(e, StokesExpr::from_json(material, units, root_path));
+				registry.set(elements, StokesExpr::from_json(material, units, root_path));
 			else if (type == "NavierStokes")
-				registry.set(e, NavierStokesExpr::from_json(material, units, root_path));
+				registry.set(elements, NavierStokesExpr::from_json(material, units, root_path));
 			else if (type == "OperatorSplitting")
-				registry.set(e, OperatorSplittingExpr::from_json(material, units, root_path));
+				registry.set(elements, OperatorSplittingExpr::from_json(material, units, root_path));
 			else if (type == "Electrostatics")
-				registry.set(e, ElectrostaticsExpr::from_json(material, units, root_path));
+				registry.set(elements, ElectrostaticsExpr::from_json(material, units, root_path));
 			else if (type == "Helmholtz")
-				registry.set(e, HelmholtzExpr::from_json(material, units, root_path));
+				registry.set(elements, HelmholtzExpr::from_json(material, units, root_path));
 			else if (type == "VolumePenalty")
-				registry.set(e, VolumePenaltyExpr::from_json(material, units, root_path));
+				registry.set(elements, VolumePenaltyExpr::from_json(material, units, root_path));
 			else if (type == "HGOFiber")
 			{
 				if (dim == 1)
-					registry.set(e, HGOFiberExpr<1>::from_json(material, units, root_path));
+					registry.set(elements, HGOFiberExpr<1>::from_json(material, units, root_path));
 				else if (dim == 2)
-					registry.set(e, HGOFiberExpr<2>::from_json(material, units, root_path));
+					registry.set(elements, HGOFiberExpr<2>::from_json(material, units, root_path));
 				else if (dim == 3)
-					registry.set(e, HGOFiberExpr<3>::from_json(material, units, root_path));
+					registry.set(elements, HGOFiberExpr<3>::from_json(material, units, root_path));
 				else
 					log_and_throw_error("Unsupported dimension {} for HGOFiber", dim);
 			}
 			else if (type == "ActiveFiber")
 			{
 				if (dim == 1)
-					registry.set(e, ActiveFiberExpr<1>::from_json(material, units, root_path));
+					registry.set(elements, ActiveFiberExpr<1>::from_json(material, units, root_path));
 				else if (dim == 2)
-					registry.set(e, ActiveFiberExpr<2>::from_json(material, units, root_path));
+					registry.set(elements, ActiveFiberExpr<2>::from_json(material, units, root_path));
 				else if (dim == 3)
-					registry.set(e, ActiveFiberExpr<3>::from_json(material, units, root_path));
+					registry.set(elements, ActiveFiberExpr<3>::from_json(material, units, root_path));
 				else
 					log_and_throw_error("Unsupported dimension {} for ActiveFiber", dim);
 			}
 			else if (type == "AMIPS")
-				registry.set(e, AMIPSExpr::from_json(material, units, root_path));
+				registry.set(elements, AMIPSExpr::from_json(material, units, root_path));
 			else
 				log_and_throw_error("Unknown material type '{}'", type);
+		}
+
+		void add_material_from_json(
+			Span<const int> elements,
+			const json &material,
+			int dim,
+			const Units &units,
+			const std::string &root_path,
+			MaterialExprRegistry &registry)
+		{
+			// MaterialSum is a json synatatic sugar to set multiple
+			// materials to the same element group.
+			if (material.at("type") == "MaterialSum")
+			{
+				for (const auto &model : material.value("models", json::array()))
+				{
+					dispatch_from_json(elements, model, dim, units, root_path, registry);
+				}
+			}
+			else
+			{
+				dispatch_from_json(elements, material, dim, units, root_path, registry);
+			}
+
+			// Probably due to hisorically reason, density is an optional fields of material instead
+			// of it's own dedicate material.
+			if (material.contains("rho") || material.contains("density"))
+				registry.set(elements, DensityExpr::from_json(material, units, root_path));
 		}
 	} // namespace
 
@@ -126,63 +156,44 @@ namespace polyfem::material
 		MaterialExprRegistry registry{n_elements};
 		int dim = mesh.dimension();
 
-		// Legacy Material json parsing has two modes: single and multi.
-		// In single mode, one material json spec applies to all body. Optional body id
-		// field are ignored. To me this seems like a minor bug but whatever.
-		// In multi mode, we have an json array of material spec, each corresponds to
-		// material of a list of body.
-
-		// Build body_id -> material json map , or detect single-object form.
-		std::unordered_map<int, const json *> body_id_to_material_json; // for multi mode.
-		const json *single = nullptr;                                   // for single mode.
-		if (materials.is_array())
+		// Legacy single-object mode applies one material to every element and ignores
+		// its optional body id.
+		if (!materials.is_array())
 		{
-			for (const auto &m : materials)
-			{
-				for (int id : utils::json_as_array<int>(m.at("id")))
-					body_id_to_material_json[id] = &m;
-			}
-		}
-		else
-		{
-			single = &materials;
+			std::vector<int> elements(n_elements);
+			std::iota(elements.begin(), elements.end(), 0);
+			add_material_from_json(elements, materials, dim, units, root_path, registry);
+			return registry;
 		}
 
-		std::unordered_set<int> missing; // body id with no material.
+		// In array mode, map each body to its last material block, matching the
+		// legacy overwrite behavior for duplicate ids.
+		std::unordered_map<int, int> body_id_to_material;
+		for (int i = 0; i < materials.size(); ++i)
+		{
+			for (int id : utils::json_as_array<int>(materials[i].at("id")))
+				body_id_to_material[id] = i;
+		}
+
+		std::vector<std::vector<int>> material_elements(materials.size());
+		std::unordered_set<int> missing;
 		for (int e = 0; e < n_elements; ++e)
 		{
-			const json *mj = single; // single mode.
-			if (mj == nullptr)       // multi mode.
+			int body_id = mesh.get_body_id(e);
+			auto it = body_id_to_material.find(body_id);
+			if (it == body_id_to_material.end())
 			{
-				int bid = mesh.get_body_id(e);
-				auto it = body_id_to_material_json.find(bid);
-				if (it == body_id_to_material_json.end())
-				{
-					missing.insert(bid);
-					continue;
-				}
-				mj = it->second;
+				missing.insert(body_id);
+				continue;
 			}
+			material_elements[it->second].push_back(e);
+		}
 
-			std::string type = mj->at("type").get<std::string>();
-			// Sum material is just a json syntactic sugar to set up multiple materials
-			// for the same body.
-			if (type == "MaterialSum")
+		for (int i = 0; i < materials.size(); ++i)
+		{
+			if (!material_elements[i].empty())
 			{
-				for (const auto &model : mj->value("models", json::array()))
-				{
-					dispatch_from_json(e, model, dim, units, root_path, registry);
-				}
-			}
-			else
-			{
-				dispatch_from_json(e, *mj, dim, units, root_path, registry);
-			}
-
-			// Density is special. It is an optional field living in each material json.
-			if (mj->contains("rho") || mj->contains("density"))
-			{
-				registry.set(e, DensityExpr::from_json(*mj, units, root_path));
+				add_material_from_json(material_elements[i], materials[i], dim, units, root_path, registry);
 			}
 		}
 
