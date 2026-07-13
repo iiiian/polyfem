@@ -4,31 +4,47 @@
 #include <polyfem/Units.hpp>
 #include <polyfem/utils/ExpressionValue.hpp>
 #include <polyfem/materials/LameParameter.hpp>
-#include <polyfem/materials/ElasticityTensor.hpp>
-#include <polyfem/materials/FiberDirection.hpp>
-
-#include <Eigen/Core>
+#include <polyfem/utils/CudaBoth.hpp>
 
 #include <string>
 
 namespace polyfem::material
 {
-	struct NeoHookeanExpr;
-
+	template <typename Scalar>
 	struct NeoHookean
 	{
-		using ExprType = NeoHookeanExpr;
+		using ExprType = NeoHookean<utils::ExpressionValue>;
+#ifdef POLYFEM_WITH_CUDA
+		using ExprViewType = NeoHookean<utils::ExpressionValueView>;
+#endif
 
-		LameParameter<double> lame;
+		LameParameter<Scalar> lame;
 	};
 
-	struct NeoHookeanExpr
+	NeoHookean<utils::ExpressionValue> neo_hookean_from_json(const json &, const Units &, const std::string &);
+
+	NeoHookean<double> eval_expr(const NeoHookean<utils::ExpressionValue> &expr, double x, double y, double z = 0, double t = 0, int element_id = -1);
+
+#ifdef POLYFEM_WITH_CUDA
+	inline NeoHookean<utils::ExpressionValueView> make_device_expr(const NeoHookean<utils::ExpressionValue> &expr, ExecutionPolicy policy)
 	{
+		return NeoHookean<utils::ExpressionValueView>{make_device_expr(expr.lame, policy)};
+	}
 
-		LameParameter<utils::ExpressionValue> lame;
+	inline bool is_device_compatible(const NeoHookean<utils::ExpressionValue> &expr)
+	{
+		return is_device_compatible(expr.lame);
+	}
 
-		static NeoHookeanExpr from_json(const json &j, const Units &units, const std::string &root_path);
-		/// Evaluate material expression at position (x,y,z), time t, and element id.
-		NeoHookean eval_expr(double x, double y, double z = 0, double t = 0, int element_id = -1) const;
-	};
+	POLYFEM_BOTH inline NeoHookean<double> eval_expr(
+		const NeoHookean<utils::ExpressionValueView> &expr,
+		double x,
+		double y,
+		double z = 0,
+		double t = 0,
+		int element_id = -1)
+	{
+		return NeoHookean<double>{eval_expr(expr.lame, x, y, z, t, element_id)};
+	}
+#endif
 } // namespace polyfem::material

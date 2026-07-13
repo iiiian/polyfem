@@ -15,7 +15,7 @@ namespace polyfem::assembler
 	template <int dim>
 	struct NeoHookeanEnergy
 	{
-		using Material = polyfem::material::NeoHookean;
+		using Material = polyfem::material::NeoHookean<double>;
 		static constexpr int VALUE_DIM = dim;
 		static constexpr int DIM = dim;
 		static constexpr bool NEED_UNKNOWN_VALUE = false;

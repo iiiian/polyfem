@@ -12,6 +12,7 @@
 #include <cuda/algorithm>
 #include <cuda/warp>
 #include <cuda/std/utility>
+#include <cuda/std/optional>
 #include <cub/cub.cuh>
 #include <Eigen/Core>
 
@@ -23,7 +24,12 @@ namespace polyfem::assembler
 {
 	namespace detail
 	{
-		template <int VALUE_DIM>
+		struct DeviceAssemblyError
+		{
+			bool is_material_missing = false;
+		};
+
+		template <int value_dim>
 		__device__ void scatter_mat_ij(
 			int elem_id,
 			int basis_i,
@@ -32,9 +38,9 @@ namespace polyfem::assembler
 			Span<const double> local_mat,
 			BSRMatrixMutableView global_mat)
 		{
-			assert(local_mat.size() == VALUE_DIM * VALUE_DIM);
+			assert(local_mat.size() == value_dim * value_dim);
 
-			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
+			using Mat = Eigen::Matrix<double, value_dim, value_dim, Eigen::RowMajor>;
 			auto mat = Eigen::Map<const Mat>(local_mat.data());
 
 			auto &elem_desc = bases.element_desc[elem_id];
@@ -54,9 +60,9 @@ namespace polyfem::assembler
 				for (int j = 0; j < col_node_ids.size(); ++j)
 				{
 					double weight = row_node_weights[i] * col_node_weights[j];
-					for (int r = 0; r < VALUE_DIM; ++r)
+					for (int r = 0; r < value_dim; ++r)
 					{
-						for (int c = 0; c < VALUE_DIM; ++c)
+						for (int c = 0; c < value_dim; ++c)
 						{
 							double value = mat(r, c);
 							if (value == 0.0)
@@ -64,8 +70,8 @@ namespace polyfem::assembler
 								continue;
 							}
 
-							int global_row = row_node_ids[i] * VALUE_DIM + r;
-							int global_col = col_node_ids[j] * VALUE_DIM + c;
+							int global_row = row_node_ids[i] * value_dim + r;
+							int global_col = col_node_ids[j] * value_dim + c;
 							double *dst = global_mat.get_entry(global_row, global_col);
 							assert(dst);
 							atomicAdd(dst, weight * value);
@@ -108,21 +114,61 @@ namespace polyfem::assembler
 			}
 		}
 
-		template <typename ScalarKernel, int BLOCK_SIZE>
+		template <typename Material, int dim>
+		__device__ cuda::std::optional<Material> eval_material_expr(
+			int elem_id,
+			int quad_id,
+			double time,
+			const AssemblyCacheView &cache,
+			const material::MaterialStoreView<typename Material::ExprViewType> &store_view)
+		{
+
+			if constexpr (std::is_same_v<Material, material::Dummy>)
+			{
+				return material::Dummy{};
+			}
+			else
+			{
+				if (elem_id < 0 || elem_id >= store_view.expr_ids.size())
+				{
+					return cuda::std::nullopt;
+				}
+
+				int expr_id = store_view.expr_ids[elem_id];
+				if (expr_id < 0 || expr_id >= store_view.expr.size())
+				{
+					return cuda::std::nullopt;
+				}
+				auto &material_expr = store_view.expr[expr_id];
+
+				ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
+				double x = elem_cache.get_physical_x(quad_id);
+				double y = (dim >= 2) ? elem_cache.get_physical_y(quad_id) : 0.0;
+				double z = (dim >= 3) ? elem_cache.get_physical_z(quad_id) : 0.0;
+				return material::eval_expr(material_expr, x, y, z, time, elem_id);
+			}
+		}
+
+		template <typename K, int block_size>
 		__global__ void assemble_scalar_kernel(
-			ScalarKernel kernel,
+			K kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			int elem_num,
-			Span<const typename ScalarKernel::Material> materials,
+			double time,
+			Span<const typename K::Material> material_evals,
+			material::MaterialStoreView<typename K::Material::ExprViewType> material_views,
 			Span<const double> unknown,
-			double *scalar_out)
+			double *scalar_out,
+			DeviceAssemblyError *error)
 		{
-			using Material = typename ScalarKernel::Material;
+			using Material = typename K::Material;
+			constexpr int DIM = K::DIM;
 
-			assert(blockDim.x == BLOCK_SIZE);
+			assert(blockDim.x == block_size);
 			int elem_id = blockIdx.x * blockDim.x + threadIdx.x;
 			double scalar = 0.0; // local scalar value.
+			bool material_missing = false;
 
 			if (elem_id < elem_num)
 			{
@@ -132,15 +178,32 @@ namespace polyfem::assembler
 
 				for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 				{
-					// Material is per cached quadrature point, matching weighted_measure.
-					const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
+					cuda::std::optional<Material> material;
+					if (!material_evals.empty())
+					{
+						// Material is per cached quadrature point, matching weighted_measure.
+						material = material_evals[cache_desc.weighted_measure_range.offset + quad_id];
+					}
+					else
+					{
+						material = eval_material_expr<Material, DIM>(elem_id, quad_id, time, cache, material_views);
+					}
 
-					double local_scalar = kernel.eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
+					if (!material)
+					{
+						error->is_material_missing = true;
+						material_missing = true;
+						break;
+					}
+
+					double local_scalar = kernel.eval_scalar(elem_id, quad_id, bases, elem_cache, *material, unknown);
 					scalar += local_scalar * elem_cache.get_weighted_measure(quad_id);
 				}
 			}
+			if (material_missing)
+				scalar = 0.0;
 
-			using BlockReduce = cub::BlockReduce<double, BLOCK_SIZE>;
+			using BlockReduce = cub::BlockReduce<double, block_size>;
 			__shared__ typename BlockReduce::TempStorage reduce_temp;
 			double sum = BlockReduce(reduce_temp).Sum(scalar);
 			if (threadIdx.x == 0)
@@ -149,16 +212,20 @@ namespace polyfem::assembler
 			}
 		}
 
-		template <typename ScalarKernel>
+		template <typename K>
 		__global__ void assemble_scalar_per_element_kernel(
-			ScalarKernel kernel,
+			K kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
-			Span<const typename ScalarKernel::Material> materials,
+			double time,
+			Span<const typename K::Material> material_evals,
+			material::MaterialStoreView<typename K::Material::ExprViewType> material_views,
 			Span<const double> unknown,
-			Span<double> scalar_out)
+			Span<double> scalar_out,
+			DeviceAssemblyError *error)
 		{
-			using Material = typename ScalarKernel::Material;
+			using Material = typename K::Material;
+			constexpr int DIM = K::DIM;
 
 			int elem_id = blockIdx.x * blockDim.x + threadIdx.x;
 			if (elem_id >= scalar_out.size())
@@ -170,33 +237,55 @@ namespace polyfem::assembler
 			ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
 			int quad_num = cache_desc.weighted_measure_range.num;
 			double scalar = 0.0; // local scalar value.
+			bool material_missing = false;
 
 			for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 			{
-				// Material is per cached quadrature point, matching weighted_measure.
-				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				double local_scalar = kernel.eval_scalar(elem_id, quad_id, bases, elem_cache, material, unknown);
+				cuda::std::optional<Material> material;
+				if (!material_evals.empty())
+				{
+					// Material is per cached quadrature point, matching weighted_measure.
+					material = material_evals[cache_desc.weighted_measure_range.offset + quad_id];
+				}
+				else
+				{
+					material = eval_material_expr<Material, DIM>(elem_id, quad_id, time, cache, material_views);
+				}
+
+				if (!material)
+				{
+					error->is_material_missing = true;
+					material_missing = true;
+					break;
+				}
+
+				double local_scalar = kernel.eval_scalar(elem_id, quad_id, bases, elem_cache, *material, unknown);
 				scalar += local_scalar * elem_cache.get_weighted_measure(quad_id);
 			}
 
-			scalar_out[elem_id] += scalar;
+			if (!material_missing)
+				scalar_out[elem_id] += scalar;
 		}
 
-		template <typename VectorKernel>
+		template <typename K>
 		__global__ void assemble_vector_kernel(
-			VectorKernel kernel,
+			K kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const DeviceVectorAssemblyTask> tasks,
-			Span<const typename VectorKernel::Material> materials,
+			double time,
+			Span<const typename K::Material> material_evals,
+			material::MaterialStoreView<typename K::Material::ExprViewType> material_views,
 			Span<const double> unknown,
 			Span<double> vec_out,
-			double extra_scaling)
+			double extra_scaling,
+			DeviceAssemblyError *error)
 		{
-			constexpr int VALUE_DIM = VectorKernel::VALUE_DIM;
+			constexpr int VALUE_DIM = K::VALUE_DIM;
+			constexpr int DIM = K::DIM;
 
-			using Material = typename VectorKernel::Material;
+			using Material = typename K::Material;
 			using Vec = Eigen::Vector<double, VALUE_DIM>;
 
 			int task_num = tasks.size();
@@ -213,37 +302,58 @@ namespace polyfem::assembler
 			ElementAssemblyCacheView elem_cache = cache.slice(elem_id);
 			int quad_num = cache_desc.weighted_measure_range.num;
 			Vec grad_i = Vec::Zero(); // local vector.
+			bool material_missing = false;
 
 			for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 			{
-				// Material is per cached quadrature point, matching weighted_measure.
-				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
 
-				Vec kernel_out = kernel.eval_vector(elem_id, quad_id, basis_id, bases, elem_cache, material, unknown);
+				cuda::std::optional<Material> material;
+				if (!material_evals.empty())
+				{
+					// Material is per cached quadrature point, matching weighted_measure.
+					material = material_evals[cache_desc.weighted_measure_range.offset + quad_id];
+				}
+				else
+				{
+					material = eval_material_expr<Material, DIM>(elem_id, quad_id, time, cache, material_views);
+				}
+
+				if (!material)
+				{
+					error->is_material_missing = true;
+					material_missing = true;
+					break;
+				}
+
+				Vec kernel_out = kernel.eval_vector(elem_id, quad_id, basis_id, bases, elem_cache, *material, unknown);
 				grad_i += kernel_out * extra_scaling * elem_cache.get_weighted_measure(quad_id);
 			}
 
-			if (!grad_i.isZero())
+			if (!material_missing && !grad_i.isZero())
 			{
 				Span<const double> grad_i_span(grad_i.data(), grad_i.size());
 				scatter_vec_i<VALUE_DIM>(elem_id, basis_id, bases, grad_i_span, vec_out);
 			}
 		}
 
-		template <typename MatrixKernel>
+		template <typename K>
 		__global__ void assemble_matrix_kernel(
-			MatrixKernel kernel,
+			K kernel,
 			AssemblyEssentialsView bases,
 			AssemblyCacheView cache,
 			Span<const DeviceMatrixAssemblyTask> tasks,
-			Span<const typename MatrixKernel::Material> materials,
+			double time,
+			Span<const typename K::Material> material_evals,
+			material::MaterialStoreView<typename K::Material::ExprViewType> material_views,
 			Span<const double> unknown,
 			BSRMatrixMutableView mat_out,
-			double extra_scaling)
+			double extra_scaling,
+			DeviceAssemblyError *error)
 		{
-			constexpr int VALUE_DIM = MatrixKernel::VALUE_DIM;
+			constexpr int VALUE_DIM = K::VALUE_DIM;
+			constexpr int DIM = K::DIM;
 
-			using Material = typename MatrixKernel::Material;
+			using Material = typename K::Material;
 			using Mat = Eigen::Matrix<double, VALUE_DIM, VALUE_DIM, Eigen::RowMajor>;
 
 			int task_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -262,17 +372,33 @@ namespace polyfem::assembler
 			// ij component of element local matrix M.
 			// Represents contribution from element local basis node i and j.
 			Mat mat_ij = Mat::Zero();
+			bool material_missing = false;
 
 			for (int quad_id = 0; quad_id < quad_num; ++quad_id)
 			{
-				// Material is per cached quadrature point, matching weighted_measure.
-				const Material &material = materials[cache_desc.weighted_measure_range.offset + quad_id];
+				cuda::std::optional<Material> material;
+				if (!material_evals.empty())
+				{
+					// Material is per cached quadrature point, matching weighted_measure.
+					material = material_evals[cache_desc.weighted_measure_range.offset + quad_id];
+				}
+				else
+				{
+					material = eval_material_expr<Material, DIM>(elem_id, quad_id, time, cache, material_views);
+				}
 
-				Mat kernel_out = kernel.eval_matrix(elem_id, quad_id, bi, bj, bases, elem_cache, material, unknown);
+				if (!material)
+				{
+					error->is_material_missing = true;
+					material_missing = true;
+					break;
+				}
+
+				Mat kernel_out = kernel.eval_matrix(elem_id, quad_id, bi, bj, bases, elem_cache, *material, unknown);
 				mat_ij += kernel_out * extra_scaling * elem_cache.get_weighted_measure(quad_id);
 			}
 
-			if (!mat_ij.isZero())
+			if (!material_missing && !mat_ij.isZero())
 			{
 				Span<const double> hess_ij_span(mat_ij.data(), mat_ij.size());
 				scatter_mat_ij<VALUE_DIM>(elem_id, bi, bj, bases, hess_ij_span, mat_out);
@@ -287,7 +413,7 @@ namespace polyfem::assembler
 		}
 
 		template <typename Material, int dim>
-		cuda::device_buffer<Material> prepare_materials(
+		cuda::device_buffer<Material> precompute_materials_on_host(
 			const AssemblyEssentials &bases,
 			const AssemblyCache &cache,
 			const material::MaterialExprRegistry &material_registry,
@@ -325,15 +451,13 @@ namespace polyfem::assembler
 						double x = elem_cache.get_physical_x(q);
 						double y = (dim >= 2) ? elem_cache.get_physical_y(q) : 0.0;
 						double z = (dim >= 3) ? elem_cache.get_physical_z(q) : 0.0;
-						Material m = material_expr->eval_expr(x, y, z, time, elem_id);
+						Material m = material::eval_expr(*material_expr, x, y, z, time, elem_id);
 
 						materials[cache_desc.weighted_measure_range.offset + q] = std::move(m);
 					}
 				});
 
-				auto d_materials =
-					cuda::make_buffer<Material>(*policy.stream, *policy.mr, global_material_num, cuda::no_init);
-				cuda::copy_bytes(*policy.stream, materials, d_materials);
+				auto d_materials = copy_to_device_async<Material>(materials, policy);
 				policy.stream->sync();
 				return d_materials;
 			}
@@ -350,22 +474,32 @@ namespace polyfem::assembler
 		double time,
 		ExecutionPolicy policy)
 	{
-		auto &p = policy;
-
 		using Material = typename ScalarKernel::Material;
 		constexpr int DIM = ScalarKernel::DIM;
 
-		for (auto &cache_desc : cache.view().desc)
-		{
-			assert(!cache_desc.is_empty);
-		}
+		auto &p = policy;
 
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
-		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, time, policy);
-		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(*p.stream, unknown, d_unknown);
+		auto d_unknown = copy_to_device_async(unknown, policy);
 		auto d_scalar_out = cuda::make_buffer<double>(*p.stream, *p.mr, 1, 0.0);
+		auto d_error = copy_to_device_async(detail::DeviceAssemblyError{}, policy);
+
+		DeviceBuf<Material> d_materials_evals;
+		Span<const Material> d_materials_evals_span;
+		material::MaterialStoreView<typename Material::ExprViewType> d_material_views;
+		if constexpr (!std::is_same_v<Material, material::Dummy>)
+		{
+			if (material_registry.is_device_compatible<typename Material::ExprType>())
+			{
+				d_material_views = material_registry.get_all_device_expr_views<typename Material::ExprType>(policy);
+			}
+			else
+			{
+				d_materials_evals = detail::precompute_materials_on_host<Material, DIM>(bases, cache, material_registry, time, policy);
+				d_materials_evals_span = *d_materials_evals;
+			}
+		}
 
 		int elem_num = bases.element_desc.size();
 		int grid_num = div_round_up(elem_num, 128);
@@ -374,12 +508,19 @@ namespace polyfem::assembler
 			d_bases,
 			d_cache,
 			elem_num,
-			d_materials,
+			time,
+			d_materials_evals_span,
+			d_material_views,
 			d_unknown,
-			d_scalar_out.data());
-		double scalar_out = 0.0;
-		cuda::copy_bytes(*p.stream, d_scalar_out, Span<double>(&scalar_out, 1));
+			d_scalar_out.data(),
+			d_error.data());
 		p.stream->sync();
+
+		double scalar_out = copy_to_host<double>(d_scalar_out.data(), policy);
+		auto error = copy_to_host<detail::DeviceAssemblyError>(d_error.data(), policy);
+		if (error.is_material_missing)
+			throw std::runtime_error("Device assembly failed. Reason: material missing.");
+
 		return scalar_out;
 	}
 
@@ -394,35 +535,50 @@ namespace polyfem::assembler
 		ExecutionPolicy policy,
 		double time)
 	{
-		auto &p = policy;
-
 		using Material = typename ScalarKernel::Material;
 		constexpr int DIM = ScalarKernel::DIM;
 
-		for (auto &cache_desc : cache.view().desc)
-		{
-			assert(!cache_desc.is_empty);
-		}
+		auto &p = policy;
 
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
-		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, time, policy);
+		auto d_unknown = copy_to_device_async(unknown, policy);
+		auto d_error = copy_to_device_async(detail::DeviceAssemblyError{}, policy);
+
+		DeviceBuf<Material> d_materials_evals;
+		Span<const Material> d_materials_evals_span;
+		material::MaterialStoreView<typename Material::ExprViewType> d_material_views;
+		if constexpr (!std::is_same_v<Material, material::Dummy>)
+		{
+			if (material_registry.is_device_compatible<typename Material::ExprType>())
+			{
+				d_material_views = material_registry.get_all_device_expr_views<typename Material::ExprType>(policy);
+			}
+			else
+			{
+				d_materials_evals = detail::precompute_materials_on_host<Material, DIM>(bases, cache, material_registry, time, policy);
+				d_materials_evals_span = *d_materials_evals;
+			}
+		}
 
 		int elem_num = bases.element_desc.size();
 		assert(vec_out.size() == elem_num);
-
-		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(*p.stream, unknown, d_unknown);
-
 		int grid_num = div_round_up(elem_num, 128);
 		detail::assemble_scalar_per_element_kernel<ScalarKernel><<<grid_num, 128, 0, p.stream->get()>>>(
 			kernel,
 			d_bases,
 			d_cache,
-			d_materials,
+			time,
+			d_materials_evals_span,
+			d_material_views,
 			d_unknown,
-			vec_out);
+			vec_out,
+			d_error.data());
 		p.stream->sync();
+
+		auto error = copy_to_host<detail::DeviceAssemblyError>(d_error.data(), policy);
+		if (error.is_material_missing)
+			throw std::runtime_error("Device assembly failed. Reason: material missing.");
 	}
 
 	template <typename VectorKernel>
@@ -437,24 +593,34 @@ namespace polyfem::assembler
 		double time = 0.0,
 		double extra_scaling = 1.0)
 	{
+		using Material = typename VectorKernel::Material;
+		constexpr int DIM = VectorKernel::DIM;
+
 		auto &p = policy;
 
 		auto d_vector_tasks = bases.device_vector_assembly_tasks(p);
 		int task_num = d_vector_tasks.size();
 
-		using Material = typename VectorKernel::Material;
-		constexpr int DIM = VectorKernel::DIM;
-
-		for (auto &cache_desc : cache.view().desc)
-		{
-			assert(!cache_desc.is_empty);
-		}
-
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
-		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, time, policy);
-		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(*p.stream, unknown, d_unknown);
+		auto d_unknown = copy_to_device_async(unknown, policy);
+		auto d_error = copy_to_device_async(detail::DeviceAssemblyError{}, policy);
+
+		DeviceBuf<Material> d_materials_evals;
+		Span<const Material> d_materials_evals_span;
+		material::MaterialStoreView<typename Material::ExprViewType> d_material_views;
+		if constexpr (!std::is_same_v<Material, material::Dummy>)
+		{
+			if (material_registry.is_device_compatible<typename Material::ExprType>())
+			{
+				d_material_views = material_registry.get_all_device_expr_views<typename Material::ExprType>(policy);
+			}
+			else
+			{
+				d_materials_evals = detail::precompute_materials_on_host<Material, DIM>(bases, cache, material_registry, time, policy);
+				d_materials_evals_span = *d_materials_evals;
+			}
+		}
 
 		int grid_num = div_round_up(task_num, 128);
 		detail::assemble_vector_kernel<VectorKernel><<<grid_num, 128, 0, p.stream->get()>>>(
@@ -462,11 +628,18 @@ namespace polyfem::assembler
 			d_bases,
 			d_cache,
 			d_vector_tasks,
-			d_materials,
+			time,
+			d_materials_evals_span,
+			d_material_views,
 			d_unknown,
 			vec_out,
-			extra_scaling);
+			extra_scaling,
+			d_error.data());
 		p.stream->sync();
+
+		auto error = copy_to_host<detail::DeviceAssemblyError>(d_error.data(), policy);
+		if (error.is_material_missing)
+			throw std::runtime_error("Device assembly failed. Reason: material missing.");
 	}
 
 	template <typename MatrixKernel>
@@ -481,24 +654,34 @@ namespace polyfem::assembler
 		double time = 0.0,
 		double extra_scaling = 1.0)
 	{
+		using Material = typename MatrixKernel::Material;
+		constexpr int DIM = MatrixKernel::DIM;
+
 		auto &p = policy;
 
 		auto d_matrix_tasks = bases.device_matrix_assembly_tasks(p);
 		int task_num = d_matrix_tasks.size();
 
-		using Material = typename MatrixKernel::Material;
-		constexpr int DIM = MatrixKernel::DIM;
-
-		for (auto &cache_desc : cache.view().desc)
-		{
-			assert(!cache_desc.is_empty);
-		}
-
 		auto d_bases = bases.device_view(p);
 		auto d_cache = cache.device_view(p);
-		auto d_materials = detail::prepare_materials<Material, DIM>(bases, cache, material_registry, time, policy);
-		auto d_unknown = cuda::make_buffer<double>(*p.stream, *p.mr, unknown.size(), cuda::no_init);
-		cuda::copy_bytes(*p.stream, unknown, d_unknown);
+		auto d_unknown = copy_to_device_async(unknown, policy);
+		auto d_error = copy_to_device_async(detail::DeviceAssemblyError{}, policy);
+
+		DeviceBuf<Material> d_materials_evals;
+		Span<const Material> d_materials_evals_span;
+		material::MaterialStoreView<typename Material::ExprViewType> d_material_views;
+		if constexpr (!std::is_same_v<Material, material::Dummy>)
+		{
+			if (material_registry.is_device_compatible<typename Material::ExprType>())
+			{
+				d_material_views = material_registry.get_all_device_expr_views<typename Material::ExprType>(policy);
+			}
+			else
+			{
+				d_materials_evals = detail::precompute_materials_on_host<Material, DIM>(bases, cache, material_registry, time, policy);
+				d_materials_evals_span = *d_materials_evals;
+			}
+		}
 
 		int grid_num = div_round_up(task_num, 128);
 		detail::assemble_matrix_kernel<MatrixKernel><<<grid_num, 128, 0, p.stream->get()>>>(
@@ -506,11 +689,18 @@ namespace polyfem::assembler
 			d_bases,
 			d_cache,
 			d_matrix_tasks,
-			d_materials,
+			time,
+			d_materials_evals_span,
+			d_material_views,
 			d_unknown,
 			mat_out,
-			extra_scaling);
+			extra_scaling,
+			d_error.data());
 		p.stream->sync();
+
+		auto error = copy_to_host<detail::DeviceAssemblyError>(d_error.data(), policy);
+		if (error.is_material_missing)
+			throw std::runtime_error("Device assembly failed. Reason: material missing.");
 	}
 
 } // namespace polyfem::assembler

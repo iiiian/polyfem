@@ -1,58 +1,13 @@
 set(SOURCES
   MaterialExprRegistryImpl.hpp
   MaterialExprRegistry.hpp
-  ElasticityTensor.hpp
-  ElasticityTensor.cpp
-  FiberDirection.hpp
-  FiberDirection.cpp
   LameParameter.hpp
   LameParameter.cpp
-  MaterialUtils.hpp
   Dummy.hpp
-  LinearElasticity.hpp
-  LinearElasticity.cpp
   Density.hpp
   Density.cpp
-  HookeLinearElasticity.hpp
-  HookeLinearElasticity.cpp
-  SaintVenant.hpp
-  SaintVenant.cpp
   NeoHookean.hpp
   NeoHookean.cpp
-  IsochoricNeoHookean.hpp
-  IsochoricNeoHookean.cpp
-  IncompressibleLinearElasticity.hpp
-  IncompressibleLinearElasticity.cpp
-  FixedCorotational.hpp
-  FixedCorotational.cpp
-  MooneyRivlin.hpp
-  MooneyRivlin.cpp
-  MooneyRivlin3Param.hpp
-  MooneyRivlin3Param.cpp
-  MooneyRivlin3ParamSymbolic.hpp
-  MooneyRivlin3ParamSymbolic.cpp
-  UnconstrainedOgden.hpp
-  UnconstrainedOgden.cpp
-  IncompressibleOgden.hpp
-  IncompressibleOgden.cpp
-  Stokes.hpp
-  Stokes.cpp
-  NavierStokes.hpp
-  NavierStokes.cpp
-  OperatorSplitting.hpp
-  OperatorSplitting.cpp
-  Electrostatics.hpp
-  Electrostatics.cpp
-  Helmholtz.hpp
-  Helmholtz.cpp
-  VolumePenalty.hpp
-  VolumePenalty.cpp
-  HGOFiber.hpp
-  HGOFiber.cpp
-  ActiveFiber.hpp
-  ActiveFiber.cpp
-  AMIPS.hpp
-  AMIPS.cpp
   BuildMaterialExprFromJson.hpp
   BuildMaterialExprFromJson.cpp
 )

@@ -5,6 +5,7 @@
 #include <tuple>
 #include <type_traits>
 #include <vector>
+#include <algorithm>
 #include <cassert>
 
 #ifdef POLYFEM_WITH_CUDA
@@ -12,16 +13,17 @@
 #include <polyfem/utils/CUDAUtils.hpp>
 #include <cuda/buffer>
 #include <cuda/algorithm>
+#include <cuda/std/type_traits>
 #endif
 
 namespace polyfem::material
 {
 
-	template <typename M>
+	template <typename T>
 	struct MaterialStoreView
 	{
-		/// Array of Material expressions. Might be empty.
-		Span<const M> expr;
+		/// Array of Material expressions or expression view if on device. Might be empty.
+		Span<const T> expr;
 		/// Per element material expression id. Empty if expr is empty.
 		/// id == -1 is a special value indicating no material expr.
 		Span<const int> expr_ids;
@@ -31,16 +33,21 @@ namespace polyfem::material
 	class MaterialStore
 	{
 	private:
+		/// Array of Material expressions. Might be empty.
 		std::vector<M> expr_;
+		/// Per element material expression id. Empty if expr is empty.
+		/// id == -1 is a special value indicating no material expr.
 		std::vector<int> expr_ids_;
 
 #ifdef POLYFEM_WITH_CUDA
 		mutable bool need_host_device_sync_ = true;
-		mutable DeviceBuf<M> d_expr_;
-		mutable DeviceBuf<int> d_expr_ids;
+		mutable DeviceBuf<typename M::ExprViewType> d_expr_;
+		mutable DeviceBuf<int> d_expr_ids_;
 #endif
 
 	public:
+		/// @brief Set/Replace material expr T of element.
+		/// @note Invalidates device material storage, which is expensive.
 		void set(int element_num, Span<const int> target_elements, M material)
 		{
 			assert(element_num >= 0);
@@ -69,23 +76,63 @@ namespace polyfem::material
 			return MaterialStoreView<M>{expr_, expr_ids_};
 		}
 
+		/// @brief Return ptr to element material expr T. nullptr if not exists.
+		/// @note Invalidates device material storage, which is expensive.
+		M *get_mutable(int element)
+		{
+			if (expr_ids_.empty() || expr_ids_[element] == -1)
+				return nullptr;
+
 #ifdef POLYFEM_WITH_CUDA
+			need_host_device_sync_ = true;
+#endif
+
+			return expr_.data() + expr_ids_[element];
+		}
+
+		const M *get(int element) const
+		{
+			if (expr_ids_.empty() || expr_ids_[element] == -1)
+				return nullptr;
+			return expr_.data() + expr_ids_[element];
+		}
+
+#ifdef POLYFEM_WITH_CUDA
+
+		bool is_device_compatible() const
+		{
+			for (const auto &expr : expr_)
+			{
+				if (!polyfem::material::is_device_compatible(expr))
+					return false;
+			}
+			return true;
+		}
+
 		/// Return view on device memory. Lazily sync data.
-		MaterialStoreView<M> device_view(ExecutionPolicy policy) const
+		///
+		/// If expression is not device compatible, return view to empty expression which evals to Nan.
+		MaterialStoreView<typename M::ExprViewType> device_view(ExecutionPolicy policy) const
 		{
 			auto &p = policy;
+
 			if (need_host_device_sync_)
 			{
-				d_expr_ = cuda::make_buffer<M>(*p.stream, *p.mr, expr_.size(), cuda::no_init);
-				d_expr_ids = cuda::make_buffer<int>(*p.stream, *p.mr, expr_ids_.size(), cuda::no_init);
-				cuda::copy_bytes(*p.stream, expr_, *d_expr_);
-				cuda::copy_bytes(*p.stream, expr_ids_, *d_expr_ids);
+				std::vector<typename M::ExprViewType> tmp(expr_.size());
+				for (int i = 0; i < expr_.size(); ++i)
+				{
+					tmp[i] = make_device_expr(expr_[i], policy);
+				}
 
-				need_host_device_sync_ = false;
+				d_expr_ = cuda::make_buffer<typename M::ExprViewType>(*p.stream, *p.mr, tmp.size(), cuda::no_init);
+				d_expr_ids_ = cuda::make_buffer<int>(*p.stream, *p.mr, expr_ids_.size(), cuda::no_init);
+				cuda::copy_bytes(*p.stream, tmp, *d_expr_);
+				cuda::copy_bytes(*p.stream, expr_ids_, *d_expr_ids_);
 				p.stream->sync();
+				need_host_device_sync_ = false;
 			}
 
-			return MaterialStore<M>{*d_expr_, *d_expr_ids};
+			return MaterialStoreView<typename M::ExprViewType>{*d_expr_, *d_expr_ids_};
 		}
 
 		/// Release device storage.
@@ -93,7 +140,7 @@ namespace polyfem::material
 		{
 			need_host_device_sync_ = true;
 			d_expr_ = {};
-			d_expr_ids = {};
+			d_expr_ids_ = {};
 		}
 #endif
 	};
@@ -101,6 +148,10 @@ namespace polyfem::material
 	template <typename... M>
 	class MaterialExprRegistryImpl
 	{
+	private:
+		int element_num_;
+		std::tuple<MaterialStore<M>...> materials_;
+
 	public:
 		MaterialExprRegistryImpl(int element_num) : element_num_(element_num) {};
 
@@ -125,24 +176,21 @@ namespace polyfem::material
 
 			auto &s = std::get<MaterialStore<T>>(materials_);
 			auto v = s.view();
-			return !(v.expr_ids.empty() || v.expr_ids_[element] == -1);
+			return !(v.expr_ids.empty() || v.expr_ids[element] == -1);
 		}
 
 		/// @brief Return ptr to element material expr T. nullptr if not exists.
+		/// @note Invalidates device material storage, which is expensive.
 		template <typename T>
-		T *get(int element)
+		T *get_mutable(int element)
 		{
 			assert(element >= 0 && element < element_num_);
 			static_assert((std::is_same_v<T, M> || ...),
 						  "T is not a material expr type, double check T appears as "
 						  "template argument in registry declaration.");
 
-			if (!has_material<T>(element))
-				return nullptr;
-
 			auto &s = std::get<MaterialStore<T>>(materials_);
-			auto v = s.view();
-			return v.expr_.data() + v.expr_ids[element];
+			return s.get_mutable(element);
 		}
 
 		/// @brief Return ptr to element material expr T. nullptr if not exists.
@@ -154,30 +202,23 @@ namespace polyfem::material
 						  "T is not a material expr type, double check T appears as "
 						  "template argument in registry declaration.");
 
-			if (!has_material<T>(element))
-				return nullptr;
-
 			auto &s = std::get<MaterialStore<T>>(materials_);
-			auto v = s.view();
-			return v.expr_.data() + v.expr_ids[element];
-		}
-
-		/// @brief Return all materials of type T.
-		template <typename T>
-		MaterialStoreView<T> get_all_materials()
-		{
-			static_assert((std::is_same_v<T, M> || ...),
-						  "T is not a material type, double check T appears as "
-						  "template argument in registry declaration.");
-
-			auto &s = std::get<MaterialStore<T>>(materials_);
-			return s.view();
+			return s.get(element);
 		}
 
 #ifdef POLYFEM_WITH_CUDA
-		/// @brief Return all materials of type T.
 		template <typename T>
-		MaterialStoreView<T> get_all_materials_device(ExecutionPolicy p)
+		bool is_device_compatible() const
+		{
+			static_assert((std::is_same_v<T, M> || ...), "T is not a material expression type");
+
+			auto &s = std::get<MaterialStore<T>>(materials_);
+			return s.is_device_compatible();
+		}
+
+		/// @brief Return all materials expr view of type T.
+		template <typename T>
+		MaterialStoreView<typename T::ExprViewType> get_all_device_expr_views(ExecutionPolicy p) const
 		{
 			static_assert((std::is_same_v<T, M> || ...),
 						  "T is not a material type, double check T appears as "
@@ -189,6 +230,7 @@ namespace polyfem::material
 #endif
 
 		/// @brief Set/Replace material expr T of element.
+		/// @note Invalidates device material storage, which is expensive.
 		template <typename T>
 		void set(Span<const int> elements, T material)
 		{
@@ -199,10 +241,6 @@ namespace polyfem::material
 			auto &s = std::get<MaterialStore<T>>(materials_);
 			s.set(element_num_, elements, std::move(material));
 		}
-
-	private:
-		int element_num_;
-		std::tuple<MaterialStore<M>...> materials_;
 	};
 
 } // namespace polyfem::material

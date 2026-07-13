@@ -1,11 +1,21 @@
 #include <polyfem/materials/Density.hpp>
-#include <polyfem/materials/MaterialUtils.hpp>
 
 namespace polyfem::material
 {
-	DensityExpr DensityExpr::from_json(const json &j, const Units &units, const std::string &root_path)
+	namespace
 	{
-		DensityExpr out;
+		utils::ExpressionValue parse_expr(const json &value, const std::string &unit_type, const std::string &root_path)
+		{
+			utils::ExpressionValue out;
+			out.init(value, root_path);
+			out.set_unit_type(unit_type);
+			return out;
+		}
+	} // namespace
+
+	Density<utils::ExpressionValue> density_from_json(const json &j, const Units &units, const std::string &root_path)
+	{
+		Density<utils::ExpressionValue> out;
 		if (j.contains("rho"))
 		{
 			out.rho = parse_expr(j.at("rho"), units.density(), root_path);
@@ -17,10 +27,10 @@ namespace polyfem::material
 		return out;
 	}
 
-	Density DensityExpr::eval_expr(double x, double y, double z, double t, int element_id) const
+	Density<double> eval_expr(const Density<utils::ExpressionValue> &expr, double x, double y, double z, double t, int element_id)
 	{
-		Density out{};
-		out.rho = rho(x, y, z, t, element_id);
+		Density<double> out{};
+		out.rho = expr.rho(x, y, z, t, element_id);
 		return out;
 	}
 } // namespace polyfem::material

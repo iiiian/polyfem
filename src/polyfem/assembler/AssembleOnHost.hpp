@@ -68,7 +68,7 @@ namespace polyfem::assembler
 				{
 					z = cache.get_physical_z(quad_id);
 				}
-				return material_expr->eval_expr(x, y, z, time, element_id);
+				return material::eval_expr(*material_expr, x, y, z, time, element_id);
 			}
 		}
 

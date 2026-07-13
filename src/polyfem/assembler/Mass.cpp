@@ -21,7 +21,7 @@ namespace polyfem::assembler
 		template <int value_dim, int dim>
 		struct MassMatrixKernel
 		{
-			using Material = material::Density;
+			using Material = material::Density<double>;
 			static constexpr int VALUE_DIM = value_dim;
 			static constexpr int DIM = dim;
 			static constexpr bool SUPPORT_DEVICE_EVAL = true;

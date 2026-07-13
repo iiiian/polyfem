@@ -22,7 +22,6 @@ namespace polyfem::material
 		void dispatch_from_json(
 			Span<const int> elements,
 			const json &material,
-			int dim, // mesh dim
 			const Units &units,
 			const std::string &root_path,
 			MaterialExprRegistry &registry)
@@ -34,92 +33,17 @@ namespace polyfem::material
 			{
 				log_and_throw_error("Nested MaterialSum is not supported!");
 			}
-			else if (type == "LinearElasticity")
-				registry.set(elements, LinearElasticityExpr::from_json(material, units, root_path));
-			else if (type == "HookeLinearElasticity")
-			{
-				if (dim == 1)
-					registry.set(elements, HookeLinearElasticityExpr<1>::from_json(material, units, root_path));
-				else if (dim == 2)
-					registry.set(elements, HookeLinearElasticityExpr<2>::from_json(material, units, root_path));
-				else if (dim == 3)
-					registry.set(elements, HookeLinearElasticityExpr<3>::from_json(material, units, root_path));
-				else
-					log_and_throw_error("Unsupported dimension {} for HookeLinearElasticity", dim);
-			}
-			else if (type == "SaintVenant")
-			{
-				if (dim == 1)
-					registry.set(elements, SaintVenantExpr<1>::from_json(material, units, root_path));
-				else if (dim == 2)
-					registry.set(elements, SaintVenantExpr<2>::from_json(material, units, root_path));
-				else if (dim == 3)
-					registry.set(elements, SaintVenantExpr<3>::from_json(material, units, root_path));
-				else
-					log_and_throw_error("Unsupported dimension {} for SaintVenant", dim);
-			}
 			else if (type == "NeoHookean")
-				registry.set(elements, NeoHookeanExpr::from_json(material, units, root_path));
-			else if (type == "IsochoricNeoHookean")
-				registry.set(elements, IsochoricNeoHookeanExpr::from_json(material, units, root_path));
-			else if (type == "IncompressibleLinearElasticity")
-				registry.set(elements, IncompressibleLinearElasticityExpr::from_json(material, units, root_path));
-			else if (type == "FixedCorotational")
-				registry.set(elements, FixedCorotationalExpr::from_json(material, units, root_path));
-			else if (type == "MooneyRivlin")
-				registry.set(elements, MooneyRivlinExpr::from_json(material, units, root_path));
-			else if (type == "MooneyRivlin3Param")
-				registry.set(elements, MooneyRivlin3ParamExpr::from_json(material, units, root_path));
-			else if (type == "MooneyRivlin3ParamSymbolic")
-				registry.set(elements, MooneyRivlin3ParamSymbolicExpr::from_json(material, units, root_path));
-			else if (type == "UnconstrainedOgden")
-				registry.set(elements, UnconstrainedOgdenExpr::from_json(material, units, root_path));
-			else if (type == "IncompressibleOgden")
-				registry.set(elements, IncompressibleOgdenExpr::from_json(material, units, root_path));
-			else if (type == "Stokes")
-				registry.set(elements, StokesExpr::from_json(material, units, root_path));
-			else if (type == "NavierStokes")
-				registry.set(elements, NavierStokesExpr::from_json(material, units, root_path));
-			else if (type == "OperatorSplitting")
-				registry.set(elements, OperatorSplittingExpr::from_json(material, units, root_path));
-			else if (type == "Electrostatics")
-				registry.set(elements, ElectrostaticsExpr::from_json(material, units, root_path));
-			else if (type == "Helmholtz")
-				registry.set(elements, HelmholtzExpr::from_json(material, units, root_path));
-			else if (type == "VolumePenalty")
-				registry.set(elements, VolumePenaltyExpr::from_json(material, units, root_path));
-			else if (type == "HGOFiber")
-			{
-				if (dim == 1)
-					registry.set(elements, HGOFiberExpr<1>::from_json(material, units, root_path));
-				else if (dim == 2)
-					registry.set(elements, HGOFiberExpr<2>::from_json(material, units, root_path));
-				else if (dim == 3)
-					registry.set(elements, HGOFiberExpr<3>::from_json(material, units, root_path));
-				else
-					log_and_throw_error("Unsupported dimension {} for HGOFiber", dim);
-			}
-			else if (type == "ActiveFiber")
-			{
-				if (dim == 1)
-					registry.set(elements, ActiveFiberExpr<1>::from_json(material, units, root_path));
-				else if (dim == 2)
-					registry.set(elements, ActiveFiberExpr<2>::from_json(material, units, root_path));
-				else if (dim == 3)
-					registry.set(elements, ActiveFiberExpr<3>::from_json(material, units, root_path));
-				else
-					log_and_throw_error("Unsupported dimension {} for ActiveFiber", dim);
-			}
-			else if (type == "AMIPS")
-				registry.set(elements, AMIPSExpr::from_json(material, units, root_path));
+				registry.set(elements, neo_hookean_from_json(material, units, root_path));
+			else if (type == "Density" || type == "Dummy")
+				return;
 			else
-				log_and_throw_error("Unknown material type '{}'", type);
+				log_and_throw_error("Material type '{}' is not supported by the NG assembly pipeline.", type);
 		}
 
 		void add_material_from_json(
 			Span<const int> elements,
 			const json &material,
-			int dim,
 			const Units &units,
 			const std::string &root_path,
 			MaterialExprRegistry &registry)
@@ -130,18 +54,18 @@ namespace polyfem::material
 			{
 				for (const auto &model : material.value("models", json::array()))
 				{
-					dispatch_from_json(elements, model, dim, units, root_path, registry);
+					dispatch_from_json(elements, model, units, root_path, registry);
 				}
 			}
 			else
 			{
-				dispatch_from_json(elements, material, dim, units, root_path, registry);
+				dispatch_from_json(elements, material, units, root_path, registry);
 			}
 
 			// Probably due to hisorically reason, density is an optional fields of material instead
 			// of it's own dedicate material.
 			if (material.contains("rho") || material.contains("density"))
-				registry.set(elements, DensityExpr::from_json(material, units, root_path));
+				registry.set(elements, density_from_json(material, units, root_path));
 		}
 	} // namespace
 
@@ -154,15 +78,13 @@ namespace polyfem::material
 		int n_elements = mesh.n_elements();
 		assert(n_elements >= 0);
 		MaterialExprRegistry registry{n_elements};
-		int dim = mesh.dimension();
-
 		// Legacy single-object mode applies one material to every element and ignores
 		// its optional body id.
 		if (!materials.is_array())
 		{
 			std::vector<int> elements(n_elements);
 			std::iota(elements.begin(), elements.end(), 0);
-			add_material_from_json(elements, materials, dim, units, root_path, registry);
+			add_material_from_json(elements, materials, units, root_path, registry);
 			return registry;
 		}
 
@@ -193,7 +115,7 @@ namespace polyfem::material
 		{
 			if (!material_elements[i].empty())
 			{
-				add_material_from_json(material_elements[i], materials[i], dim, units, root_path, registry);
+				add_material_from_json(material_elements[i], materials[i], units, root_path, registry);
 			}
 		}
 
