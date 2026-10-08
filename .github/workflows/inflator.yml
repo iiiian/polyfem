@@ -1,0 +1,35 @@
+name: Inflator Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ libboost-dev libgmp-dev libmpfr-dev
+      - name: Configure with downloaded inflator
+        run: |
+          cmake -S . -B build/inflator-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPOLYFEM_WITH_INFLATOR=ON \
+            -DPOLYFEM_WITH_OPTIMIZATION=ON \
+            -DPOLYFEM_WITH_TESTS=ON \
+            -DPOLYFEM_WITH_PYTHON=OFF \
+            -DPOLYFEM_PORTABLE_BUILD=ON
+      - name: Build
+        run: cmake --build build/inflator-ci --target unit_tests
+      - name: Test 2D and 3D integration
+        run: build/inflator-ci/tests/unit_tests '[inflator_library],[periodic_contact_3d],inflated periodic shape schema validation'

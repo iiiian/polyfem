@@ -301,6 +301,39 @@ TEST_CASE("barrier contact form derivatives", "[form][form_derivatives][contact_
 	test_form(form, *state_ptr);
 }
 
+TEST_CASE("barrier contact caches are per form", "[form][contact_form]")
+{
+	Eigen::MatrixXd vertices(4, 2);
+	vertices << 0, 0, 1, 0, 0, 0.05, 1, 0.05;
+	Eigen::MatrixXi edges(2, 2);
+	edges << 0, 1, 2, 3;
+	ipc::CollisionMesh mesh(vertices, edges, Eigen::MatrixXi(0, 3));
+	const auto make_form = [&]() {
+		auto form = std::make_unique<BarrierContactForm>(
+			mesh, 0.1, 1, false, false, false, false, false, false,
+			ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1000000);
+		form->set_barrier_stiffness(1);
+		return form;
+	};
+	auto first = make_form();
+	auto second = make_form();
+	const Eigen::VectorXd zero = Eigen::VectorXd::Zero(8);
+	first->init(zero);
+	REQUIRE(first->value(zero) > 0);
+	second->init(zero);
+	CHECK(second->collision_set().size() == first->collision_set().size());
+	CHECK(std::abs(second->value(zero) - first->value(zero)) < 1e-12);
+	Eigen::VectorXd separated = zero;
+	separated(5) = separated(7) = 0.2;
+	first->solution_changed(separated);
+	REQUIRE(first->collision_set().empty());
+	second->solution_changed(separated);
+	CHECK(second->collision_set().empty());
+	first->solution_changed(zero);
+	second->solution_changed(zero);
+	CHECK(second->value(zero) > 0);
+}
+
 TEST_CASE("smooth contact form derivatives", "[form][form_derivatives][contact_form]")
 {
 	const int dim = GENERATE(2, 3);

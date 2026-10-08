@@ -43,6 +43,7 @@ namespace polyfem
 			Eigen::MatrixXd solution;
 			Eigen::MatrixXd velocity;
 			Eigen::MatrixXd acceleration;
+			Eigen::MatrixXd displacement_gradient; ///< Macro G for decomposing solution as u = fluctuation + G X; empty when absent.
 		};
 
 		// Called after each completed forward-simulation step.

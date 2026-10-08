@@ -13,11 +13,13 @@ set(test_sources
   test_interpolation.cpp
   test_jacobian.cpp
   test_matrix.cpp
+  test_macro_strain.cpp
   test_ncmesh.cpp
   test_normal.cpp
   test_navier_stokes_forms.cpp
   test_output.cpp
   test_periodic_boundary.cpp
+  test_periodic_contact_3d.cpp
   test_problem.cpp
   test_quadrature.cpp
   test_rbf.cpp
@@ -32,6 +34,7 @@ set(test_sources
 
 if(POLYFEM_WITH_OPTIMIZATION)
   list(APPEND test_sources
+    test_inflated_periodic_shape.cpp
     test_diff.cpp
     test_opt.cpp
     test_form_derivatives.cpp
@@ -47,6 +50,9 @@ add_executable(unit_tests ${test_sources})
 ################################################################################
 
 target_link_libraries(unit_tests PUBLIC polyfem::polyfem)
+if(POLYFEM_WITH_INFLATOR)
+  target_link_libraries(unit_tests PRIVATE inflator::inflator)
+endif()
 
 include(polyfem_warnings)
 target_link_libraries(unit_tests PUBLIC polyfem::warnings)

@@ -1,0 +1,6 @@
+{
+    "maxArea": 0.001,
+    "marchingSquaresGridSize": 64,
+    "forceMSGridSize": true,
+    "forceConsistentInterfaceMesh": false
+}
