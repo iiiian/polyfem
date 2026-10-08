@@ -2,7 +2,7 @@ name: Inflator Integration
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/inflator-*']
   pull_request:
   workflow_dispatch:
 
@@ -12,6 +12,7 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 2
     steps:
@@ -33,3 +34,64 @@ jobs:
         run: cmake --build build/inflator-ci --target unit_tests
       - name: Test 2D and 3D integration
         run: build/inflator-ci/tests/unit_tests '[inflator_library],[periodic_contact_3d],inflated periodic shape schema validation'
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Identify dependency toolchain
+        id: toolchain
+        shell: pwsh
+        run: |
+          $revision = git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD
+          "cache-key=windows-inflator-vcpkg-$env:ImageVersion-$revision" >> $env:GITHUB_OUTPUT
+      - name: Restore dependency binaries
+        id: dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: ${{ steps.toolchain.outputs.cache-key }}
+          restore-keys: windows-inflator-vcpkg-
+      - name: Install dependencies
+        shell: pwsh
+        run: >-
+          vcpkg install --triplet x64-windows
+          boost-bimap boost-callable-traits boost-foreach boost-format boost-graph
+          boost-heap boost-multiprecision boost-parameter boost-ptr-container
+          boost-random boost-typeof boost-unordered gmp mpfr
+      - name: Save dependency binaries
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: ${{ steps.toolchain.outputs.cache-key }}
+      - name: Configure and build with downloaded inflator
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64
+          set "PATH=%CD%\build\inflator-ci\inflator\install\bin;%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\bin;%PATH%"
+          cmake -S . -B build/inflator-ci -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET=x64-windows ^
+            -DPOLYFEM_WITH_INFLATOR=ON ^
+            -DPOLYFEM_WITH_OPTIMIZATION=ON ^
+            -DPOLYFEM_WITH_TESTS=ON ^
+            -DPOLYFEM_WITH_PYTHON=OFF ^
+            -DPOLYFEM_PORTABLE_BUILD=ON ^
+            -DPOLYFEM_WITH_CLIPPER=OFF ^
+            -DPOLYFEM_THREADING=CPP ^
+            -DPOLYSOLVE_WITH_CHOLMOD=OFF ^
+            -DPOLYSOLVE_WITH_AMGCL=OFF ^
+            -DPOLYSOLVE_WITH_MKL=OFF
+          if errorlevel 1 exit /b 1
+          cmake --build build/inflator-ci --target unit_tests
+      - name: Test 2D and 3D integration
+        shell: cmd
+        run: |
+          set "PATH=%CD%\build\inflator-ci\inflator\install\bin;%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\bin;%PATH%"
+          build\inflator-ci\tests\unit_tests.exe "[inflator_library],[periodic_contact_3d],inflated periodic shape schema validation"
