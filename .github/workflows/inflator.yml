@@ -5,12 +5,19 @@ on:
     branches: [main, 'ci/inflator-*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to test
+        type: choice
+        default: all
+        options: [all, linux, windows]
 
 permissions:
   contents: read
 
 jobs:
   linux:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'windows'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -36,6 +43,7 @@ jobs:
         run: build/inflator-ci/tests/unit_tests '[inflator_library],[periodic_contact_3d],inflated periodic shape schema validation'
 
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'linux'
     runs-on: windows-2022
     timeout-minutes: 90
     env:
@@ -87,7 +95,7 @@ jobs:
             -DPOLYFEM_THREADING=CPP ^
             -DPOLYSOLVE_WITH_CHOLMOD=OFF ^
             -DPOLYSOLVE_WITH_AMGCL=OFF ^
-            -DPOLYSOLVE_WITH_MKL=OFF
+            -DPOLYSOLVE_WITH_MKL=ON
           if errorlevel 1 exit /b 1
           cmake --build build/inflator-ci --target unit_tests
       - name: Test 2D and 3D integration
