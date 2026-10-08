@@ -84,6 +84,10 @@ jobs:
           cmake -S . -B build/inflator-ci -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl ^
+            -DCMAKE_CXX_STANDARD=17 ^
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON ^
+            -DCMAKE_CXX_EXTENSIONS=OFF ^
+            -DCMAKE_CXX_FLAGS="/std:c++17 /DWIN32 /D_WINDOWS /EHsc" ^
             -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
             -DVCPKG_TARGET_TRIPLET=x64-windows ^
             -DPOLYFEM_WITH_INFLATOR=ON ^
@@ -103,3 +107,11 @@ jobs:
         run: |
           set "PATH=%CD%\build\inflator-ci\inflator\install\bin;%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\bin;%PATH%"
           build\inflator-ci\tests\unit_tests.exe "[inflator_library],[periodic_contact_3d],inflated periodic shape schema validation"
+      - name: Preserve configure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-inflator-configure
+          path: |
+            build/inflator-ci/CMakeCache.txt
+            build/inflator-ci/CMakeFiles/CMakeConfigureLog.yaml
