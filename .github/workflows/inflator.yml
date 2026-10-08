@@ -45,11 +45,24 @@ jobs:
   windows:
     if: github.event_name != 'workflow_dispatch' || inputs.platform != 'linux'
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
-      CMAKE_BUILD_PARALLEL_LEVEL: 2
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      SCCACHE_IDLE_TIMEOUT: "12000"
     steps:
       - uses: actions/checkout@v4
+      - name: Install compiler cache
+        shell: pwsh
+        run: |
+          choco install -y sccache
+          "SCCACHE_DIR=${env:LOCALAPPDATA}\Mozilla\sccache" >> $env:GITHUB_ENV
+      - name: Restore compiler cache
+        id: compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: windows-inflator-compiler-${{ github.sha }}
+          restore-keys: windows-inflator-compiler-
       - name: Identify dependency toolchain
         id: toolchain
         shell: pwsh
@@ -84,6 +97,7 @@ jobs:
           cmake -S . -B build/inflator-ci -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl ^
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
             -DCMAKE_CXX_STANDARD=17 ^
             -DCMAKE_CXX_STANDARD_REQUIRED=ON ^
             -DCMAKE_CXX_EXTENSIONS=OFF ^
@@ -106,7 +120,13 @@ jobs:
         shell: cmd
         run: |
           set "PATH=%CD%\build\inflator-ci\inflator\install\bin;%VCPKG_INSTALLATION_ROOT%\installed\x64-windows\bin;%PATH%"
-          build\inflator-ci\tests\unit_tests.exe "[inflator_library],[periodic_contact_3d],inflated periodic shape schema validation"
+          ctest --test-dir build/inflator-ci --output-on-failure --timeout 600 -R "^(inflator library homogenization and adjoint in 2D and 3D|3D periodic contact surface and derivatives|inflated periodic shape schema validation)$"
+      - name: Save compiler cache
+        if: always() && steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: windows-inflator-compiler-${{ github.sha }}
       - name: Preserve configure diagnostics
         if: always()
         uses: actions/upload-artifact@v4
