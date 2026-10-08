@@ -97,10 +97,11 @@ act push -W .github/workflows/inflator.yml \
 
 The fork's `Library` workflow separately tests GCC and Clang, installation,
 an independent consumer, and the public symbol/header boundary. It also tests
-the inflator and installed consumer on native Windows MSVC runners. This is
-not a Windows test of the full PolyFEM integration. `act` runs the Ubuntu jobs
-in Linux containers; it cannot execute native Windows or macOS runners.
-No macOS validation has been performed.
+the inflator and installed consumer on native Windows MSVC runners. PolyFEM's
+`Inflator Integration` workflow tests the full integration on Linux and native
+Windows MSVC runners. `act` runs the Ubuntu jobs in Linux containers; it cannot
+execute native Windows or macOS runners. The inflator-enabled PolyFEM build
+has not been validated on macOS.
 
 ## Validation record
 
@@ -114,3 +115,33 @@ Windows testing exposed an original inflator portability bug: `long(1e12)`
 overflowed the 32-bit Windows `long`, making the symmetry tolerance negative.
 The pinned revision uses an explicit 64-bit integer denominator. This was
 verified with an isolated MSVC reproducer before rerunning mesh tests.
+
+### PolyFEM fork CI, 2026-10-08
+
+Implementation commit: `7e39519d5`, tested on temporary branch
+`ci/inflator-integration-20261008` in `iiiian/polyfem`. Subsequent commits on
+that branch configure CI and record results; they do not change the implementation.
+
+- [Linux inflator integration](https://github.com/iiiian/polyfem/actions/runs/37735143979/job/113172883465):
+  passes all three focused tests (1,566 assertions).
+- [Windows inflator integration](https://github.com/iiiian/polyfem/actions/runs/37743179017):
+  passes all three focused tests with MSVC and the downloaded inflator library.
+- [Standard build/test matrix](https://github.com/iiiian/polyfem/actions/runs/37735143975):
+  all six builds succeed with the inflator disabled, but the test suites fail.
+
+| Platform | Configuration | Passed / total tests |
+| --- | --- | --- |
+| Linux | DebugNoSymbols | 229 / 230 |
+| Linux | Release | 263 / 266 |
+| macOS | DebugNoSymbols | 228 / 229 |
+| macOS | Release | 262 / 265 |
+| Windows | DebugNoSymbols | 226 / 227 |
+| Windows | Release | 245 / 246 |
+
+Every configuration fails `homogenization initial guess dependencies`: its
+out-of-range-source section expects a validation exception, but the current
+dependency graph accesses an invalid index and crashes. Linux and macOS Release
+also fail `macro strain 3d forward regression` and the `standard` suite's
+`standard/homogenization_3d.json` case with a final-strategy line-search error.
+These failures remain unresolved; passing the focused inflator tests does not
+establish that the full regression suite passes.
