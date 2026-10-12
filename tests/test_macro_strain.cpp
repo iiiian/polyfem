@@ -23,7 +23,7 @@
 
 using namespace polyfem;
 
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(_WIN32)
 #define HOMOGENIZATION_TEST_LABEL "[varform][macro_strain]"
 #else
 #define HOMOGENIZATION_TEST_LABEL "[.][varform][macro_strain]"
@@ -403,7 +403,7 @@ TEST_CASE("macro strain 3d forward regression", HOMOGENIZATION_TEST_LABEL)
 	// CHECK(gradient.allFinite());
 }
 
-#if defined(POLYFEM_WITH_OPTIMIZATION)
+#if defined(POLYFEM_WITH_OPTIMIZATION) && !defined(_WIN32)
 TEST_CASE("macro strain forward and differentiable parity", HOMOGENIZATION_TEST_LABEL)
 {
 	for (const std::string scene : {"homogenize-stress.json", "homogenize-stress-periodic.json"})

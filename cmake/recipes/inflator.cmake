@@ -15,13 +15,25 @@ set(inflator_build_type "${CMAKE_BUILD_TYPE}")
 if(NOT inflator_build_type)
     set(inflator_build_type Release)
 endif()
+set(inflator_configure_args)
+foreach(variable CMAKE_TOOLCHAIN_FILE CMAKE_MSVC_RUNTIME_LIBRARY VCPKG_TARGET_TRIPLET VCPKG_HOST_TRIPLET VCPKG_INSTALLED_DIR)
+    if(DEFINED ${variable})
+        list(APPEND inflator_configure_args "-D${variable}=${${variable}}")
+    endif()
+endforeach()
 set(inflator_library "${inflator_install}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}inflator${CMAKE_SHARED_LIBRARY_SUFFIX}")
+set(inflator_byproducts "${inflator_library}")
+if(WIN32)
+    set(inflator_library "${inflator_install}/bin/inflator.dll")
+    set(inflator_import_library "${inflator_install}/lib/${CMAKE_IMPORT_LIBRARY_PREFIX}inflator${CMAKE_IMPORT_LIBRARY_SUFFIX}")
+    set(inflator_byproducts "${inflator_library}" "${inflator_import_library}")
+endif()
 if(POLYFEM_INFLATOR_SOURCE_DIR)
     set(inflator_source SOURCE_DIR "${POLYFEM_INFLATOR_SOURCE_DIR}")
 else()
     set(inflator_source
         GIT_REPOSITORY https://github.com/iiiian/microstructure_inflators.git
-        GIT_TAG 14e10832611194de4969c61a617b31dfb673127f)
+        GIT_TAG c34b61d8c05ae200df268bbf71fc7153b5051e85)
 endif()
 
 ExternalProject_Add(polyfem_inflator_build
@@ -41,10 +53,11 @@ ExternalProject_Add(polyfem_inflator_build
         -DLIBIGL_WITH_OPENGL_GLFW=OFF
         -DLIBIGL_WITH_OPENGL_GLFW_IMGUI=OFF
         -DLIBIGL_WITH_VIEWER=OFF
+        ${inflator_configure_args}
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target inflator
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR>
-    BUILD_BYPRODUCTS "${inflator_library}")
+    BUILD_BYPRODUCTS ${inflator_byproducts})
 
 file(MAKE_DIRECTORY "${inflator_install}/include")
 add_library(inflator::inflator SHARED IMPORTED GLOBAL)
@@ -52,4 +65,7 @@ set_target_properties(inflator::inflator PROPERTIES
     IMPORTED_LOCATION "${inflator_library}"
     INTERFACE_COMPILE_FEATURES cxx_std_17
     INTERFACE_INCLUDE_DIRECTORIES "${inflator_install}/include")
+if(WIN32)
+    set_target_properties(inflator::inflator PROPERTIES IMPORTED_IMPLIB "${inflator_import_library}")
+endif()
 add_dependencies(inflator::inflator polyfem_inflator_build)

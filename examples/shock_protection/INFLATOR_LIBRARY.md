@@ -96,20 +96,25 @@ act push -W .github/workflows/inflator.yml \
 ```
 
 The fork's `Library` workflow separately tests GCC and Clang, installation,
-an independent consumer, and the public symbol/header boundary. This review
-contains Linux support only. Windows exports, MSVC fixes, dependency handling,
-and native CI are isolated on `feature/inflator-windows` in both repositories.
+an independent consumer, and the public symbol/header boundary. This branch
+adds Windows exports, MSVC fixes, dependency handling, and native CI on top of
+the Linux review. Both repositories use `feature/inflator-windows` for this patch.
 `act` runs the Ubuntu jobs in Linux containers; it cannot execute native Windows
 or macOS runners. No macOS inflator validation has been performed.
 
 ## Validation record
 
-The Linux dependency is pinned to `14e10832611194de4969c61a617b31dfb673127f`.
-After the platform split, the library and installed-consumer tests pass locally,
+The Windows-enabled dependency is pinned to `c34b61d8c05ae200df268bbf71fc7153b5051e85`.
+On the Linux review base, the library and installed-consumer tests pass locally,
 the shared library exports only `inflator::inflate`, and the focused PolyFEM
 integration tests pass all 1,566 assertions in three test cases. The prior
 combined implementation also passed Linux GCC/Clang library and consumer tests
 under `act`, and local library ASan/UBSan tests with leak detection.
+
+The Windows inflator source tree is identical to the previously tested revision:
+[library and installed consumer](https://github.com/iiiian/microstructure_inflators/actions/runs/37729323743).
+The [native PolyFEM integration run](https://github.com/iiiian/polyfem/actions/runs/37743179017)
+passed all three focused tests. These are pre-split results, not new Windows runs.
 
 The [full regression matrix](https://github.com/iiiian/polyfem/actions/runs/37735143975)
 is not green: the invalid `initial_guess` test crashes, and Linux/macOS Release
