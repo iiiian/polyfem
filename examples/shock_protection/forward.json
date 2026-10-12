@@ -1,0 +1,79 @@
+{
+    "geometry": [{
+        "mesh": "tiled.msh",
+        "transformation": {"scale": [0.5, 0.5]},
+        "surface_selection": {"threshold": 1e-7}
+    }],
+    "space": {
+        "discr_order": 2,
+        "advanced": {"quadrature_order": 5}
+    },
+    "materials": {"type": "NeoHookean", "E": 1000000, "nu": 0.3},
+    "boundary_conditions": {
+        "dirichlet_boundary": ["pin.txt"],
+        "periodic": [
+            {"boundary_ids": [1, 3]},
+            {"boundary_ids": [2, 4]}
+        ]
+    },
+    "constraints": {
+        "macro_displacement_gradient": {
+            "value": [[0, 0], [0, "-t"]],
+            "fixed_components": [3]
+        }
+    },
+    "time": {"quasistatic": true, "t0": 0, "dt": 0.05, "time_steps": 4},
+    "contact": {
+        "enabled": true,
+        "periodic": true,
+        "use_convergent_formulation": true,
+        "dhat": 0.0005
+    },
+    "solver": {
+        "max_threads": 16,
+        "linear": {"solver": "Eigen::CholmodSupernodalLLT"},
+        "contact": {"barrier_stiffness": 100000000},
+        "nonlinear": {
+            "max_iterations": 1000,
+            "norm_type": "Euclidean",
+            "grad_norm_tol": 1e-6,
+            "rel_grad_norm_tol": 1e-8,
+            "line_search": {"method": "Backtracking", "use_grad_norm_tol": 0.001},
+            "Newton": {
+                "use_psd_projection": false,
+                "use_psd_projection_in_regularized": false,
+                "reg_weight_inc": 100,
+                "reg_weight_max": 1e16
+            }
+        },
+        "augmented_lagrangian": {
+            "initial_weight": 10000,
+            "error": 1e-8,
+            "max_weight": 1000000,
+            "eta": 0.9,
+            "nonlinear": {
+                "max_iterations": 50,
+                "norm_type": "Euclidean",
+                "grad_norm_tol": 0.001,
+                "allow_out_of_iterations": true,
+                "line_search": {"method": "Backtracking", "use_grad_norm_tol": 0.001},
+                "Newton": {
+                    "use_psd_projection": false,
+                    "use_psd_projection_in_regularized": false,
+                    "reg_weight_inc": 100,
+                    "reg_weight_max": 1e16
+                }
+            }
+        }
+    },
+    "output": {
+        "directory": "output",
+        "log": {"level": "debug"},
+        "paraview": {
+            "file_name": "compression.pvd",
+            "volume": true,
+            "surface": false
+        },
+        "advanced": {"save_time_sequence": true}
+    }
+}
